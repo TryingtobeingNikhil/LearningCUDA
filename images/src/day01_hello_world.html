@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+<style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("hello, gpu", "day 01 · my first CUDA kernel");
+
+  // CPU
+  box(90, 290, 300, 240, { fill: COLORS.yellow });
+  text(240, 360, "CPU", { font: "'Caveat', cursive", size: 56, weight: 700, anchor: "middle" });
+  text(240, 395, "(host)", { size: 26, color: COLORS.muted, anchor: "middle" });
+  text(240, 470, "runs main()", { size: 30, anchor: "middle" });
+
+  // GPU
+  box(650, 290, 300, 240, { fill: COLORS.teal });
+  text(800, 360, "GPU", { font: "'Caveat', cursive", size: 56, weight: 700, anchor: "middle" });
+  text(800, 395, "(device)", { size: 26, color: COLORS.muted, anchor: "middle" });
+  box(770, 425, 60, 60, { fill: "#fdfaf3", fillStyle: "solid", label: "t0", size: 26 });
+  text(800, 512, "printf(...)", { size: 22, anchor: "middle" });
+
+  // terminal
+  box(1210, 290, 300, 240);
+  line(1210, 340, 1510, 340);
+  text(1235, 325, "terminal", { size: 24, color: COLORS.muted });
+  text(1235, 420, "> hello from gpu", { size: 30 });
+  text(1235, 460, "  to my macbook", { size: 30 });
+  text(1235, 500, "  air m2", { size: 30 });
+
+  // CPU -> GPU
+  arrow(400, 410, 640, 410);
+  text(520, 390, "hello<<<1, 1>>>()", { size: 28, anchor: "middle" });
+  text(520, 445, "1 block, 1 thread", { size: 24, color: COLORS.muted, anchor: "middle" });
+
+  // GPU -> terminal
+  arrow(960, 410, 1200, 410);
+  text(1080, 390, "cudaDeviceSynchronize()", { size: 23, anchor: "middle" });
+  text(1080, 445, "wait, then print", { size: 24, color: COLORS.muted, anchor: "middle" });
+
+  // notes
+  text(90, 650, "__global__  =  runs on the GPU, called from the CPU", { size: 32 });
+  text(90, 710, "<<<blocks, threads>>>  =  how many threads to launch", { size: 32 });
+  const async = text(90, 770, "launch is async: no sync  →  main() exits  →", { size: 32 });
+  underline(after(async, "no output!", { size: 32 }), COLORS.coral);
+});
+</script>
+</body>
+</html>

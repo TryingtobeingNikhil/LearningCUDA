@@ -1,0 +1,62 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+<style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("vector addition", "day 01 · one thread per element");
+
+  const x0 = 220, W = 84, H = 60, HL = 6;   // HL = highlighted column
+  const cx = i => x0 + i * W + W / 2;
+  const rowLabel = (y, s) => text(180, y + 44, s, { font: "'Caveat', cursive", size: 48, weight: 700, anchor: "middle" });
+
+  rowLabel(215, "A"); rowLabel(290, "B"); rowLabel(520, "C");
+  for (let i = 0; i < 8; i++) {
+    const hl = i === HL ? { fill: COLORS.coral } : {};
+    box(x0 + i * W, 215, W, H, { ...hl, label: String(i + 1), size: 30 });
+    box(x0 + i * W, 290, W, H, { ...hl, label: String((i + 1) * 10), size: 30 });
+    arrow(cx(i), 358, cx(i), 402, { head: 12 });
+    circle(cx(i), 430, 48, { label: "+", ...(i === HL ? { fill: COLORS.coral } : {}) });
+    arrow(cx(i), 458, cx(i), 512, { head: 12 });
+    box(x0 + i * W, 520, W, H, { fill: i === HL ? COLORS.coral : COLORS.teal, label: String((i + 1) * 11), size: 30 });
+    text(cx(i), 628, String(i % 4), { size: 24, color: COLORS.muted, anchor: "middle" });
+  }
+
+  // blocks of 4 threads
+  text(195, 628, "threadIdx", { size: 20, color: COLORS.muted, anchor: "end" });
+  [0, 1].forEach(b => {
+    const l = x0 + b * 4 * W + 6, r = x0 + (b + 1) * 4 * W - 6;
+    line(l, 650, r, 650); line(l, 640, l, 650); line(r, 640, r, 650);
+    text((l + r) / 2, 685, `block ${b}`, { size: 28, anchor: "middle" });
+  });
+
+  // which element am I?
+  text(1010, 250, "which element am I?", { font: "'Caveat', cursive", size: 50, weight: 700 });
+  text(1010, 315, "i = blockIdx.x * blockDim.x", { size: 30 });
+  text(1010, 355, "      + threadIdx.x", { size: 30 });
+  text(1010, 435, "block 1, thread 2:", { size: 30, color: COLORS.muted });
+  underline(text(1010, 478, "i = 1 × 4 + 2 = 6", { size: 34 }), COLORS.coral);
+  text(1010, 560, "if (i < n)", { size: 30 });
+  text(1010, 598, "extra threads past the end skip", { size: 26, color: COLORS.muted });
+
+  // memory round trip
+  text(90, 760, "the full trip:", { size: 26, color: COLORS.muted });
+  box(90, 780, 190, 58, { fill: COLORS.yellow, label: "CPU: A, B", size: 28 });
+  arrow(290, 809, 470, 809);
+  text(380, 795, "cudaMemcpy", { size: 22, anchor: "middle" });
+  box(480, 780, 270, 58, { fill: COLORS.teal, label: "GPU: C = A + B", size: 28 });
+  arrow(760, 809, 940, 809);
+  text(850, 795, "cudaMemcpy", { size: 22, anchor: "middle" });
+  box(950, 780, 160, 58, { fill: COLORS.yellow, label: "CPU: C", size: 28 });
+  text(1140, 818, "check → PASSED", { size: 28 });
+});
+</script>
+</body>
+</html>

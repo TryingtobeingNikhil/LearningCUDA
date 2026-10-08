@@ -1,0 +1,12 @@
+# compiled binaries
+*.out
+*.o
+*.exe
+a.out
+day*/hello_world
+day*/*.bin
+
+# os / editor
+.DS_Store
+.vscode/
+.idea/
