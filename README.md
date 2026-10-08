@@ -18,4 +18,3 @@ Writing GPU code every day and posting what I learn, with a hand-drawn diagram f
 
   ![vector addition](images/day01_vector_addition.png)
 
-- bugs I hit: `print` → `printf`, plus a missing `;`
