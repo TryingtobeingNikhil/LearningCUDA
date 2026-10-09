@@ -18,3 +18,18 @@ Writing GPU code every day and posting what I learn, with a hand-drawn diagram f
 
   ![vector addition](images/day01_vector_addition.png)
 
+### Day 02
+
+- threads can be laid out in 1D, 2D or 3D (`dim3` has `.x`, `.y`, `.z`), which makes it natural to give each thread one cell of a matrix: `row = blockIdx.y * blockDim.y + threadIdx.y`, `col = blockIdx.x * blockDim.x + threadIdx.x`, then `idx = row * width + col`.
+  - [thread_indexing_2d.cu](day02/thread_indexing_2d.cu) prints which block wrote each cell and its flat index
+
+  ![2d indexing](images/day02_2d_indexing.png)
+
+- matrix transpose: [matrix_transpose.cu](day02/matrix_transpose.cu), three versions timed side by side
+  - **naive**: gives the right answer, but while reads are coalesced (neighbouring threads read neighbouring addresses), writes go down a column, so neighbouring threads write a whole row apart
+  - **tiled**: each block loads a 32×32 tile into shared memory row by row, waits at `__syncthreads()` (a barrier for every thread in the block), then writes the flipped tile out row by row. Both reads and writes are coalesced, and the flip happens in fast shared memory
+  - **tiled + padding**: `tile[32][33]` instead of `tile[32][32]`. Reading a tile column would otherwise hit the same shared-memory bank 32 times (a bank conflict); the extra column shifts each row onto a different bank
+
+  ![transpose](images/day02_transpose.png)
+
+- big lesson: GPU speed isn't just about doing less math, it's about how threads touch memory

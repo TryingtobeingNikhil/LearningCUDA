@@ -1,0 +1,68 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+<style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("matrix transpose", "day 02 · same answer, very different memory traffic");
+
+  const S = 52, L = "abcdefghijklmnop";
+  // 4x4 matrix; hl(r, c) -> fill colour or undefined; transposed = show out = in^T
+  function matrix(x, y, hl, transposed) {
+    for (let r = 0; r < 4; r++)
+      for (let c = 0; c < 4; c++) {
+        const ch = transposed ? L[c * 4 + r] : L[r * 4 + c];
+        box(x + c * S, y + r * S, S, S, { fill: hl(r, c), label: ch, size: 26 });
+      }
+  }
+  const caption = (x, y, s) => text(x + 2 * S, y, s, { size: 24, color: COLORS.muted, anchor: "middle" });
+  const rowLabel = (y, s) => text(80, y, s, { font: "'Caveat', cursive", size: 50, weight: 700 });
+
+  // ---- naive ----
+  rowLabel(255, "naive");
+  const y1 = 280;
+  matrix(110, y1, (r, c) => r === 0 ? COLORS.coral : undefined, false);
+  caption(110, y1 + 4 * S + 30, "input");
+  arrow(340, y1 + 2 * S, 450, y1 + 2 * S);
+  matrix(470, y1, (r, c) => c === 0 ? COLORS.coral : undefined, true);
+  caption(470, y1 + 4 * S + 30, "output");
+
+  const nx = 760;
+  text(nx, 330, "read a row  →  threads side by side  ✓", { size: 28 });
+  text(nx, 380, "write a column  →  threads land a whole row apart  ✗", { size: 28 });
+  text(nx, 430, "= uncoalesced writes, wastes memory bandwidth", { size: 26, color: COLORS.muted });
+
+  // ---- tiled ----
+  rowLabel(585, "tiled");
+  const y2 = 610;
+  matrix(110, y2, () => COLORS.teal, false);
+  caption(110, y2 + 4 * S + 30, "input");
+  arrow(340, y2 + 2 * S, 450, y2 + 2 * S);
+  text(395, y2 + 2 * S - 16, "load rows ✓", { size: 21, anchor: "middle" });
+  matrix(470, y2, (r, c) => c === 0 ? COLORS.coral : COLORS.purple, false);
+  caption(470, y2 + 4 * S + 30, "shared memory tile");
+
+  line(718, y2 - 22, 718, y2 + 4 * S + 10, { stroke: COLORS.coral, strokeWidth: 3 });
+  text(718, y2 - 32, "__syncthreads()", { size: 22, anchor: "middle" });
+  arrow(735, y2 + 2 * S, 845, y2 + 2 * S);
+  text(790, y2 + 2 * S - 16, "write rows ✓", { size: 21, anchor: "middle" });
+  matrix(865, y2, (r, c) => r === 0 ? COLORS.coral : undefined, true);
+  caption(865, y2 + 4 * S + 30, "output");
+
+  const tx = 1135;
+  text(tx, 660, "the flip happens inside", { size: 28 });
+  text(tx, 698, "shared memory (fast)", { size: 28 });
+  underline(text(tx, 760, "reads + writes both coalesced", { size: 28 }), COLORS.coral);
+  text(tx, 818, "tile[32][33]: +1 column", { size: 24, color: COLORS.muted });
+  text(tx, 850, "= no bank conflicts", { size: 24, color: COLORS.muted });
+});
+</script>
+</body>
+</html>
