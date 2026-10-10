@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+<style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("matrix multiplication", "day 03 · every output cell is one dot product");
+
+  const S = 60, HR = 1, HC = 3;  // highlighted row of A / column of B
+  function grid(x, y, rows, cols, hl, label) {
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++)
+        box(x + c * S, y + r * S, S, S, { fill: hl(r, c) ? COLORS.coral : undefined,
+          label: label ? label(r, c) : undefined, size: 24 });
+  }
+  const bigText = (x, y, s) => text(x, y, s, { font: "'Caveat', cursive", size: 60, weight: 700, anchor: "middle" });
+  const cap = (x, y, s) => text(x, y, s, { size: 26, color: COLORS.muted, anchor: "middle" });
+
+  // A (3 x 4)
+  grid(120, 330, 3, 4, (r) => r === HR, (r, c) => r === HR ? `a${c}` : undefined);
+  cap(240, 590, "A  (M × N)  =  3 × 4");
+  bigText(405, 440, "×");
+
+  // B (4 x 5)
+  grid(450, 300, 4, 5, (r, c) => c === HC, (r, c) => c === HC ? `b${r}` : undefined);
+  cap(600, 590, "B  (N × K)  =  4 × 5");
+  bigText(795, 440, "=");
+
+  // C (3 x 5)
+  grid(840, 330, 3, 5, (r, c) => r === HR && c === HC, (r, c) => r === HR && c === HC ? "Σ" : undefined);
+  cap(990, 590, "C  (M × K)  =  3 × 5");
+
+  // shape rule
+  text(1220, 380, "(M × N) · (N × K)", { size: 32 });
+  text(1220, 425, "→  M × K", { size: 32 });
+  underline(text(1220, 485, "the inner N's must match", { size: 28 }), COLORS.coral);
+
+  // one thread per output cell
+  text(120, 690, "one thread → one cell of C", { font: "'Caveat', cursive", size: 46, weight: 700 });
+  text(120, 745, "for (int i = 0; i < N; i++)   sum += A[row*N + i] * B[i*K + col];", { size: 28 });
+  text(120, 790, "C[row*K + col] = sum;", { size: 28 });
+  text(120, 845, "Σ = a0·b0 + a1·b1 + a2·b2 + a3·b3   (row-major: A[row][i] lives at A[row*N + i])",
+       { size: 24, color: COLORS.muted });
+});
+</script>
+</body>
+</html>

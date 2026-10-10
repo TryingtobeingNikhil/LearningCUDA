@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+<style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("tiled matmul", "day 03 · load once into shared memory, reuse it TILE times");
+
+  const S = 44;
+  const TILE_FILL = (t) => t === 0 ? COLORS.purple : COLORS.teal;
+
+  // B: 8 rows x 4 cols, above C. column band = cols 2..3, split into 2x2 tiles going down
+  const bx = 520, by = 205;
+  for (let r = 0; r < 8; r++)
+    for (let c = 0; c < 4; c++)
+      box(bx + c * S, by + r * S, S, S, { fill: c >= 2 ? TILE_FILL(Math.floor(r / 2)) : undefined });
+  for (let t = 0; t < 4; t++) {
+    box(bx + 2 * S, by + t * 2 * S, 2 * S, 2 * S, { strokeWidth: 4 });
+    text(bx + 4 * S + 14, by + t * 2 * S + S + 9, `t${t}`, { size: 26 });
+  }
+  text(bx - 30, by + 40, "B", { font: "'Caveat', cursive", size: 52, weight: 700, anchor: "middle" });
+
+  // A: 4 rows x 8 cols, left of C. row band = rows 2..3, split into 2x2 tiles going right
+  const ax = 120, ay = 575;
+  for (let r = 0; r < 4; r++)
+    for (let c = 0; c < 8; c++)
+      box(ax + c * S, ay + r * S, S, S, { fill: r >= 2 ? TILE_FILL(Math.floor(c / 2)) : undefined });
+  for (let t = 0; t < 4; t++) {
+    box(ax + t * 2 * S, ay + 2 * S, 2 * S, 2 * S, { strokeWidth: 4 });
+    text(ax + t * 2 * S + S, ay + 4 * S + 32, `t${t}`, { size: 26, anchor: "middle" });
+  }
+  text(ax - 35, ay + 40, "A", { font: "'Caveat', cursive", size: 52, weight: 700, anchor: "middle" });
+
+  // C: 4 x 4, the block's tile = bottom-right 2x2
+  const cx = 520, cy = 575;
+  for (let r = 0; r < 4; r++)
+    for (let c = 0; c < 4; c++)
+      box(cx + c * S, cy + r * S, S, S, { fill: r >= 2 && c >= 2 ? COLORS.coral : undefined });
+  box(cx + 2 * S, cy + 2 * S, 2 * S, 2 * S, { strokeWidth: 4 });
+  text(cx + 4 * S + 40, cy + 40, "C", { font: "'Caveat', cursive", size: 52, weight: 700, anchor: "middle" });
+  text(cx + 2 * S, cy + 4 * S + 40, "one block = one tile of C", { size: 24, color: COLORS.muted, anchor: "middle" });
+
+  text(120, 330, "purple = tiles being used right now (t0)", { size: 24, color: COLORS.muted });
+  text(120, 362, "teal = tiles waiting for later steps", { size: 24, color: COLORS.muted });
+
+  // steps
+  const sx = 860;
+  text(sx, 260, "for each tile step t:", { font: "'Caveat', cursive", size: 48, weight: 700 });
+  text(sx, 325, "1.  load tile t of A + tile t of B → shared memory", { size: 28 });
+  text(sx, 375, "2.  __syncthreads()", { size: 28 });
+  text(sx, 425, "3.  every thread does TILE multiply-adds", { size: 28 });
+  text(sx + 46, 462, "reading only shared memory (fast)", { size: 24, color: COLORS.muted });
+  text(sx, 512, "4.  __syncthreads(), slide to t + 1", { size: 28 });
+
+  underline(text(sx, 610, "each value loaded once, used TILE times", { size: 30 }), COLORS.coral);
+  text(sx, 660, "naive: every thread re-reads its whole row of A", { size: 24, color: COLORS.muted });
+  text(sx, 692, "and column of B from slow global memory", { size: 24, color: COLORS.muted });
+  text(sx, 760, "TILE = 16  →  ~16× fewer global reads", { size: 28 });
+});
+</script>
+</body>
+</html>
