@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+<style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("gpu memory types", "day 04 · fast + tiny vs big + slow");
+
+  const levels = [
+    { name: "registers", scope: "private to one thread", x: 560, w: 280, y: 250, fill: COLORS.teal,
+      nums: "~1 cycle · 256 KB per SM" },
+    { name: "shared memory", scope: "shared by one block", x: 440, w: 520, y: 390, fill: COLORS.purple,
+      nums: "~20–30 cycles · 64 KB per SM" },
+    { name: "global memory", scope: "every thread + the CPU", x: 300, w: 800, y: 530, fill: undefined,
+      nums: "~400–600 cycles · 16 GB" },
+  ];
+  for (const l of levels) {
+    box(l.x, l.y, l.w, 110, { fill: l.fill });
+    text(700, l.y + 55, l.name, { font: "'Caveat', cursive", size: 44, weight: 700, anchor: "middle" });
+    text(700, l.y + 90, l.scope, { size: 24, color: COLORS.muted, anchor: "middle" });
+    text(1240, l.y + 68, l.nums, { size: 26 });
+  }
+  text(1240, 230, "rough numbers on a T4:", { size: 24, color: COLORS.muted });
+
+  // faster up, bigger down
+  arrow(220, 630, 220, 260);
+  text(220, 240, "faster", { size: 28, anchor: "middle" });
+  arrow(1170, 260, 1170, 630);
+  text(1170, 670, "bigger", { size: 28, anchor: "middle" });
+
+  // matmul mapping
+  text(120, 735, "in day 03's matmul:", { size: 26, color: COLORS.muted });
+  text(120, 780, "sum → register     A / B tiles → shared     A, B, C → global", { size: 30 });
+  underline(text(120, 845, "move data less, reuse it more", { size: 34 }), COLORS.coral);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+<style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("1D stencil", "day 04 · out[i] = average of in[i-2 .. i+2]");
+
+  const S = 60, x0 = 160, N = 12, R = 2;
+  const cx = i => x0 + i * S + S / 2;
+  const rowLabel = (y, s) => text(80, y, s, { font: "'Caveat', cursive", size: 46, weight: 700 });
+
+  // ---- global only ----
+  rowLabel(255, "global only");
+  const gy = 280, oy = 440;
+  for (let i = 0; i < N; i++) {
+    box(x0 + i * S, gy, S, 50, { fill: i === 6 ? COLORS.coral : undefined, label: `${i}`, size: 22 });
+    box(x0 + i * S, oy, S, 50, { fill: i >= 4 && i <= 8 ? COLORS.teal : undefined });
+  }
+  text(x0 - 20, gy + 33, "in", { size: 24, color: COLORS.muted, anchor: "end" });
+  text(x0 - 20, oy + 33, "out", { size: 24, color: COLORS.muted, anchor: "end" });
+  for (let o = 4; o <= 8; o++) arrow(cx(6), gy + 54, cx(o), oy - 4, { head: 10 });
+
+  const nx = 1000;
+  text(nx, 330, "each output reads its 5 neighbours", { size: 28 });
+  text(nx, 368, "straight from global memory", { size: 28 });
+  text(nx, 425, "→ in[6] is needed by out[4..8],", { size: 28 });
+  text(nx, 463, "    so it gets fetched 5 times", { size: 28 });
+
+  // ---- shared memory ----
+  rowLabel(580, "shared memory");
+  const sy = 605, ty = 715;
+  for (let i = 0; i < N; i++) {
+    const halo = i < R || i >= N - R;
+    box(x0 + i * S, sy, S, 50, { fill: i === 6 ? COLORS.coral : undefined, label: `${i}`, size: 22 });
+    arrow(cx(i), sy + 54, cx(i), ty - 4, { head: 9 });
+    box(x0 + i * S, ty, S, 50, { fill: halo ? COLORS.yellow : COLORS.purple });
+  }
+  text(x0 - 20, sy + 33, "in", { size: 24, color: COLORS.muted, anchor: "end" });
+  text(x0 - 20, ty + 33, "tile", { size: 24, color: COLORS.muted, anchor: "end" });
+  text(x0 + S, ty + 85, "halo", { size: 24, anchor: "middle" });
+  text(x0 + (N / 2) * S, ty + 85, "this block's elements", { size: 24, anchor: "middle" });
+  text(x0 + (N - 1) * S, ty + 85, "halo", { size: 24, anchor: "middle" });
+
+  text(nx, 650, "block copies its piece + R halo cells", { size: 28 });
+  text(nx, 688, "into shared memory once, then reads", { size: 28 });
+  text(nx, 726, "neighbours from there", { size: 28 });
+  underline(text(nx, 795, "global reads per input: 5× → 1×", { size: 30 }), COLORS.coral);
+});
+</script>
+</body>
+</html>
