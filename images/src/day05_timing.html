@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+<style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("timing a kernel", "day 05 · the launch returns before the GPU is done");
+
+  // timeline lanes
+  const lx = 260, y1 = 300, y2 = 420;
+  text(120, y1 + 38, "CPU", { font: "'Caveat', cursive", size: 46, weight: 700 });
+  text(120, y2 + 38, "GPU", { font: "'Caveat', cursive", size: 46, weight: 700 });
+  box(lx, y1, 110, 56, { fill: COLORS.yellow, label: "launch", size: 24 });
+  text(lx + 130, y1 + 36, "→ already doing other stuff ...", { size: 24, color: COLORS.muted });
+  arrow(lx + 55, y1 + 60, lx + 120, y2 - 4, { head: 12 });
+  box(lx + 120, y2, 760, 56, { fill: COLORS.teal, label: "vectorAdd running", size: 26 });
+
+  // wrong: CPU timer spans only the launch
+  const by = y1 - 30;
+  line(lx, by, lx + 110, by, { stroke: COLORS.coral, strokeWidth: 3 });
+  line(lx, by - 10, lx, by + 10, { stroke: COLORS.coral, strokeWidth: 3 });
+  line(lx + 110, by - 10, lx + 110, by + 10, { stroke: COLORS.coral, strokeWidth: 3 });
+  text(lx + 130, by + 8, "CPU timer, no sync: ~0.01 ms  ✗  (only the launch)", { size: 26 });
+
+  // right: events span the kernel
+  const ey = y2 + 95;
+  line(lx + 120, ey, lx + 880, ey, { strokeWidth: 3 });
+  line(lx + 120, ey - 10, lx + 120, ey + 10, { strokeWidth: 3 });
+  line(lx + 880, ey - 10, lx + 880, ey + 10, { strokeWidth: 3 });
+  text(lx + 500, ey + 40, "cudaEventRecord(start) → kernel → cudaEventRecord(stop)  ✓", { size: 26, anchor: "middle" });
+
+  // bandwidth
+  text(120, 700, "then turn time into a speed:", { size: 26, color: COLORS.muted });
+  text(120, 750, "bandwidth = bytes moved / time", { size: 32 });
+  text(120, 795, "vector add moves 3 arrays (read a, read b, write c)", { size: 26, color: COLORS.muted });
+  underline(text(950, 750, "compare with peak: ~320 GB/s on a T4", { size: 32 }), COLORS.coral);
+});
+</script>
+</body>
+</html>

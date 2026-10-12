@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+<style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("cuda errors are silent", "day 05 · if you don't check, nobody tells you");
+
+  // header row
+  const cols = [120, 600, 1060];
+  text(cols[0], 270, "what went wrong", { size: 26, color: COLORS.muted });
+  text(cols[1], 270, "what you see", { size: 26, color: COLORS.muted });
+  text(cols[2], 270, "how to catch it", { size: 26, color: COLORS.muted });
+
+  const rows = [
+    { y: 295, bug: ["bad launch config", "e.g. 2048 threads per block"],
+      see: ["kernel never runs,", "output is just zeros"],
+      fix: ["cudaGetLastError()", "right after the launch"], fill: undefined },
+    { y: 455, bug: ["crash inside the kernel", "e.g. writing through a null ptr"],
+      see: ["error shows up later, at the", "next sync / cudaMemcpy (async!)"],
+      fix: ["CUDA_CHECK(", "cudaDeviceSynchronize())"], fill: undefined },
+    { y: 615, bug: ["off-by-one: i <= n", "one write past the end"],
+      see: ["no error at all.", "it even prints PASSED"],
+      fix: ["compute-sanitizer ./app", ""], fill: COLORS.coral },
+  ];
+  for (const r of rows) {
+    box(100, r.y, 1400, 130, { fill: r.fill });
+    line(580, r.y + 15, 580, r.y + 115);
+    line(1040, r.y + 15, 1040, r.y + 115);
+    text(cols[0], r.y + 55, r.bug[0], { size: 30 });
+    text(cols[0], r.y + 95, r.bug[1], { size: 24, color: COLORS.muted });
+    text(cols[1], r.y + 55, r.see[0], { size: 28 });
+    text(cols[1], r.y + 95, r.see[1], { size: 28 });
+    text(cols[2], r.y + 55, r.fix[0], { size: 30 });
+    if (r.fix[1]) text(cols[2], r.y + 95, r.fix[1], { size: 30 });
+  }
+  text(cols[2], 615 + 95, "the scary one", { size: 24, color: COLORS.muted });
+
+  underline(text(100, 820, "wrap every CUDA call in CUDA_CHECK(...) and check after every launch", { size: 30 }), COLORS.coral);
+});
+</script>
+</body>
+</html>
