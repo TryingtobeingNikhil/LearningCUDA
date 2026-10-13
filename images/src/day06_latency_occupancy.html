@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+<style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("latency hiding + occupancy", "day 06 · keep enough warps around so someone is always ready");
+
+  // ---- timeline: warps take turns ----
+  const x0 = 260, U = 46;  // one unit of time
+  const lanes = [
+    [["c", 0, 2], ["w", 2, 6], ["c", 8, 2], ["w", 10, 6]],
+    [["c", 2, 2], ["w", 4, 6], ["c", 10, 2], ["w", 12, 6]],
+    [["c", 4, 2], ["w", 6, 6], ["c", 12, 2], ["w", 14, 6]],
+    [["c", 6, 2], ["w", 8, 6], ["c", 14, 2], ["w", 16, 6]],
+  ];
+  lanes.forEach((segs, w) => {
+    const y = 230 + w * 62;
+    text(x0 - 20, y + 34, `warp ${w}`, { size: 24, anchor: "end" });
+    for (const [kind, s, len] of segs) {
+      if (kind === "c") box(x0 + s * U, y, len * U, 44, { fill: COLORS.teal, label: "math", size: 20 });
+      else { line(x0 + s * U + 6, y + 22, x0 + (s + len) * U - 6, y + 22, { stroke: COLORS.muted });
+             text(x0 + (s + len / 2) * U, y + 16, "waiting for memory...", { size: 18, color: COLORS.muted, anchor: "middle" }); }
+    }
+  });
+  text(x0, 495, "while one warp waits for memory (~400+ cycles), the scheduler switches to a warp that's ready", { size: 24 });
+  text(x0, 528, "→ the math units never sit idle", { size: 24, color: COLORS.muted });
+
+  // ---- occupancy ----
+  text(90, 580, "occupancy = warps living on an SM / max warps it can hold (32 on a T4)", { size: 28 });
+  text(90, 630, "each SM has a fixed budget, and the tightest one wins:", { size: 26, color: COLORS.muted });
+  const lim = ["1024 threads", "64K registers", "64 KB shared", "16 blocks"];
+  lim.forEach((s, i) => box(90 + i * 250, 650, 230, 54, { fill: COLORS.purple, label: s, size: 24 }));
+
+  text(90, 760, "256 threads × 64 regs  →  4 blocks fit  →  32 warps  →  100%", { size: 27 });
+  text(90, 805, "256 threads × 128 regs →  2 blocks fit  →  16 warps  →  50%", { size: 27 });
+  underline(text(1110, 785, "more warps = more latency hidden", { size: 30 }), COLORS.coral);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+<style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("blocks → SMs → warps", "day 06 · how the GPU actually runs your threads");
+
+  // ---- GPU with SMs ----
+  box(90, 240, 470, 470);
+  text(110, 280, "GPU (a T4 has 40 SMs)", { size: 26, color: COLORS.muted });
+  for (let r = 0; r < 2; r++)
+    for (let c = 0; c < 2; c++) {
+      const x = 120 + c * 215, y = 310 + r * 190;
+      box(x, y, 190, 165, { fill: COLORS.teal });
+      text(x + 95, y + 40, `SM ${r * 2 + c}`, { font: "'Caveat', cursive", size: 38, weight: 700, anchor: "middle" });
+      box(x + 20, y + 65, 70, 70, { fill: "#fdfaf3", fillStyle: "solid", label: `B${r * 2 + c}`, size: 24 });
+      box(x + 100, y + 65, 70, 70, { fill: "#fdfaf3", fillStyle: "solid", label: `B${r * 2 + c + 4}`, size: 24 });
+    }
+  text(325, 750, "a whole block always runs on ONE SM", { size: 26, anchor: "middle" });
+  text(325, 785, "(several blocks can share an SM)", { size: 22, color: COLORS.muted, anchor: "middle" });
+
+  // ---- zoom: block -> warps ----
+  arrow(570, 470, 680, 470);
+  text(625, 455, "zoom in", { size: 22, color: COLORS.muted, anchor: "middle" });
+  text(700, 280, "one block of 128 threads", { size: 28 });
+  for (let w = 0; w < 4; w++) {
+    const y = 305 + w * 95;
+    for (let k = 0; k < 16; k++)
+      box(700 + k * 26, y, 26, 50, { fill: w === 1 ? COLORS.coral : COLORS.purple });
+    text(1130, y + 34, `warp ${w}: threads ${w * 32}–${w * 32 + 31}`, { size: 26 });
+  }
+  text(700, 710, "(each little box = 2 threads)", { size: 22, color: COLORS.muted });
+
+  // ---- what a warp is ----
+  underline(text(700, 770, "warp = 32 threads that run the same instruction together", { size: 30 }), COLORS.coral);
+  text(700, 815, "warp = threadIdx.x / 32,   lane = threadIdx.x % 32", { size: 26, color: COLORS.muted });
+});
+</script>
+</body>
+</html>
