@@ -10,3 +10,6 @@ day*/*.bin
 .DS_Store
 .vscode/
 .idea/
+
+# private chat prompts (local only)
+prompts/
