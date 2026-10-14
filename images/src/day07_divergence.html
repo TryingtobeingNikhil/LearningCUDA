@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+<style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("warp divergence", "day 07 · a warp can only run one instruction at a time");
+
+  const S = 58, x0 = 300;
+  function laneRow(y, label, cellFor) {
+    text(x0 - 25, y + 38, label, { size: 26, anchor: "end" });
+    for (let l = 0; l < 8; l++) {
+      const c = cellFor(l);
+      box(x0 + l * S, y, S, S, { fill: c.fill, label: c.label, size: 24, color: c.color });
+    }
+  }
+  const idle = { label: "–", color: COLORS.muted };
+
+  // ---- split per thread ----
+  text(120, 255, "if (threadIdx.x % 2 == 0) A();  else B();", { size: 28 });
+  laneRow(285, "step 1", l => l % 2 === 0 ? { fill: COLORS.teal, label: "A" } : idle);
+  laneRow(355, "step 2", l => l % 2 === 1 ? { fill: COLORS.coral, label: "B" } : idle);
+  const nx = 820;
+  text(nx, 315, "one warp has to run BOTH paths,", { size: 28 });
+  text(nx, 353, "one after the other. half the lanes", { size: 28 });
+  text(nx, 391, "sit idle (–) each time  →  time = A + B", { size: 28 });
+
+  // ---- split per warp ----
+  text(120, 500, "if ((threadIdx.x / 32) % 2 == 0) A();  else B();", { size: 28 });
+  laneRow(530, "warp 0", () => ({ fill: COLORS.teal, label: "A" }));
+  laneRow(600, "warp 1", () => ({ fill: COLORS.coral, label: "B" }));
+  text(nx, 560, "every lane in a warp agrees, so", { size: 28 });
+  text(nx, 598, "each warp runs only its own path", { size: 28 });
+  text(nx, 636, "→  time = A (or B), no waste", { size: 28 });
+
+  text(x0, 715, "(drawing 8 lanes per warp to keep it small, real warps have 32)", { size: 22, color: COLORS.muted });
+  underline(text(120, 800, "divergence only costs you when threads in the SAME warp disagree", { size: 32 }), COLORS.coral);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+<style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("not every if is bad", "day 07 · which branches actually cost you");
+
+  const cards = [
+    { x: 90, fill: COLORS.teal, head: "boundary check", code: ["if (i < n)", "  c[i] = a[i] + b[i];"],
+      note: ["only the very last warp is", "split → basically free"] },
+    { x: 580, fill: COLORS.teal, head: "tiny branch", code: ["y = x > 0 ? x : 0;", "y = fmaxf(x, 0.0f);"],
+      note: ["compiler computes both + picks", "one (a 'select'), no jumping"] },
+    { x: 1070, fill: COLORS.coral, head: "big branch, split per thread", code: ["if (tid % 2) heavyA();", "else        heavyB();"],
+      note: ["the one that hurts: every", "warp pays A + B  (~2×)"] },
+  ];
+  for (const c of cards) {
+    box(c.x, 250, 440, 380, { fill: c.fill });
+    text(c.x + 25, 300, c.head, { font: "'Caveat', cursive", size: 42, weight: 700 });
+    box(c.x + 25, 330, 390, 120, { fill: "#fdfaf3", fillStyle: "solid" });
+    text(c.x + 45, 380, c.code[0], { size: 26 });
+    text(c.x + 45, 420, c.code[1], { size: 26 });
+    text(c.x + 25, 520, c.note[0], { size: 26 });
+    text(c.x + 25, 560, c.note[1], { size: 26 });
+  }
+
+  text(90, 720, "the fix for the bad one: rearrange the work so whole warps take the same path", { size: 28 });
+  text(90, 765, "e.g. split by warp index (threadIdx.x / 32) instead of thread index", { size: 26, color: COLORS.muted });
+  underline(text(90, 840, "same work, same split, ~2× faster", { size: 32 }), COLORS.coral);
+});
+</script>
+</body>
+</html>
