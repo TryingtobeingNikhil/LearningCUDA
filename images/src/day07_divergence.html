@@ -31,6 +31,7 @@ fontsReady.then(() => {
   text(nx, 315, "one warp has to run BOTH paths,", { size: 28 });
   text(nx, 353, "one after the other. half the lanes", { size: 28 });
   text(nx, 391, "sit idle (–) each time  →  time = A + B", { size: 28 });
+  text(nx, 432, "measured on a T4: 6.68 ms vs A + B = 6.73 ms ✓", { size: 24, color: COLORS.muted });
 
   // ---- split per warp ----
   text(120, 500, "if ((threadIdx.x / 32) % 2 == 0) A();  else B();", { size: 28 });
@@ -38,7 +39,8 @@ fontsReady.then(() => {
   laneRow(600, "warp 1", () => ({ fill: COLORS.coral, label: "B" }));
   text(nx, 560, "every lane in a warp agrees, so", { size: 28 });
   text(nx, 598, "each warp runs only its own path", { size: 28 });
-  text(nx, 636, "→  time = A (or B), no waste", { size: 28 });
+  text(nx, 636, "→  no idle lanes, no wasted steps", { size: 28 });
+  text(nx, 677, "measured: 5.25 ms (1.27× faster, same work)", { size: 24, color: COLORS.muted });
 
   text(x0, 715, "(drawing 8 lanes per warp to keep it small, real warps have 32)", { size: 22, color: COLORS.muted });
   underline(text(120, 800, "divergence only costs you when threads in the SAME warp disagree", { size: 32 }), COLORS.coral);

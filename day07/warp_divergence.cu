@@ -11,6 +11,9 @@
 #include <iostream>
 #include <iomanip>
 #include <vector>
+#include <string>
+#include <functional>
+#include <algorithm>
 
 // ---------------------------------------------------------------------------
 // the two "paths" a thread can take.
@@ -28,16 +31,24 @@ __device__ float pathB(float x, int iters) {
     return x;
 }
 
-// baseline: every thread takes path A, no branch at all
-__global__ void noBranch(float* out, int n, int iters) {
+// baselines: every thread takes the same path, no branch at all.
+// we need BOTH, because A and B may not cost the same
+__global__ void allA(float* out, int n, int iters) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
     out[i] = pathA(i * 1e-6f, iters);
 }
 
+__global__ void allB(float* out, int n, int iters) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    out[i] = pathB(i * 1e-6f, iters);
+}
+
 // split by THREAD: neighbours inside the same warp disagree
 // (even lanes -> A, odd lanes -> B), so every warp has to run A with the odd
-// lanes switched off, then B with the even lanes switched off. cost ~ A + B
+// lanes switched off, then B with the even lanes switched off.
+// cost ~ A + B (measured on a T4: 6.68 ms vs A + B = 6.73 ms)
 __global__ void branchPerThread(float* out, int n, int iters) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
@@ -47,7 +58,9 @@ __global__ void branchPerThread(float* out, int n, int iters) {
 }
 
 // split by WARP: the same 50/50 split of work, but all 32 lanes of a warp
-// agree (warp 0 -> A, warp 1 -> B, ...). each warp runs only one path. cost ~ A
+// agree (warp 0 -> A, warp 1 -> B, ...). each warp runs only one path.
+// naive guess: (A + B) / 2. measured on a T4: ~B, because every block holds
+// both kinds of warps and a block is only done when its slowest warp is
 __global__ void branchPerWarp(float* out, int n, int iters) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
@@ -64,9 +77,9 @@ __global__ void reluIf(const float* x, float* y, int n) {
     else             y[i] = 0.0f;
 }
 
-// ...and without one. for branches this short the compiler usually emits a
-// "select" (compute both, pick one) instead of jumping, so there's no real
-// divergence and both versions should take about the same time
+// ...and without one. I expected the compiler to turn the tiny if into a
+// "select" (compute both, pick one) so both would tie. measured on a T4:
+// if = 0.197 ms, fmaxf = 0.140 ms, so fmaxf was 1.4x faster. measure, don't assume
 __global__ void reluMax(const float* x, float* y, int n) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
@@ -91,6 +104,48 @@ float timeMs(Launch launch, int runs = 5) {
     return ms / runs;
 }
 
+// keeps the GPU busy for ~targetMs so its clock ramps up to full speed.
+// a cold GPU starts at a low clock and speeds up under load; without this,
+// whatever kernel runs first looks slower than it really is
+void warmUpGpu(float* d_out, int n, int iters, int blocks, int threads, float targetMs = 500.0f) {
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cudaEventRecord(start);
+    float elapsed = 0.0f;
+    while (elapsed < targetMs) {
+        for (int k = 0; k < 10; k++) allA<<<blocks, threads>>>(d_out, n, iters);
+        cudaEventRecord(stop);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&elapsed, start, stop);
+    }
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+}
+
+struct Bench {
+    std::string name;
+    std::function<void()> launch;
+    std::vector<float> times;
+    float median() const {
+        std::vector<float> t = times;
+        std::sort(t.begin(), t.end());
+        return t[t.size() / 2];
+    }
+    float lo() const { return *std::min_element(times.begin(), times.end()); }
+    float hi() const { return *std::max_element(times.begin(), times.end()); }
+};
+
+// round-robin: A, B, C, A, B, C, ... so if the clock drifts during the test,
+// every kernel is affected the same way. then report the median of each
+void runRounds(std::vector<Bench>& benches, int rounds = 7) {
+    for (int r = 0; r < rounds; r++)
+        for (auto& b : benches) b.times.push_back(timeMs(b.launch, 3));
+    for (const auto& b : benches)
+        std::cout << std::left << std::setw(20) << b.name << ": " << b.median()
+                  << " ms   (spread " << b.lo() << " - " << b.hi() << ")\n";
+}
+
 void run_demo() {
     const int n = 1 << 22;          // ~4M threads
     const int iters = 256;          // how much math each path does
@@ -99,17 +154,23 @@ void run_demo() {
 
     float* d_out = nullptr;
     cudaMalloc(&d_out, n * sizeof(float));
-
     std::cout << std::fixed << std::setprecision(3);
+
+    warmUpGpu(d_out, n, iters, blocks, threads);
+
     std::cout << "--- warp divergence (" << n << " threads, " << iters << " iterations) ---\n";
-
-    float tNone = timeMs([&] { noBranch<<<blocks, threads>>>(d_out, n, iters); });
-    float tWarp = timeMs([&] { branchPerWarp<<<blocks, threads>>>(d_out, n, iters); });
-    float tThread = timeMs([&] { branchPerThread<<<blocks, threads>>>(d_out, n, iters); });
-
-    std::cout << "no branch           : " << tNone << " ms\n";
-    std::cout << "branch per warp     : " << tWarp << " ms   (no divergence)\n";
-    std::cout << "branch per thread   : " << tThread << " ms   (diverges, expect ~2x)\n";
+    std::vector<Bench> div = {
+        {"all A (baseline)", [&] { allA<<<blocks, threads>>>(d_out, n, iters); }, {}},
+        {"all B (baseline)", [&] { allB<<<blocks, threads>>>(d_out, n, iters); }, {}},
+        {"branch per warp", [&] { branchPerWarp<<<blocks, threads>>>(d_out, n, iters); }, {}},
+        {"branch per thread", [&] { branchPerThread<<<blocks, threads>>>(d_out, n, iters); }, {}},
+    };
+    runRounds(div);
+    float tA = div[0].median(), tB = div[1].median();
+    float tWarp = div[2].median(), tThread = div[3].median();
+    std::cout << "naive guess per warp: ~(A+B)/2 = " << (tA + tB) / 2 << " ms\n";
+    std::cout << "worst case per thread: ~A+B    = " << (tA + tB) << " ms\n";
+    std::cout << "divergence cost     : " << tThread / tWarp << "x  (per thread vs per warp, same work)\n";
 
     // ReLU: inputs alternate sign so the if really goes both ways
     std::vector<float> h_x(n);
@@ -120,17 +181,17 @@ void run_demo() {
     cudaMalloc(&d_y2, n * sizeof(float));
     cudaMemcpy(d_x, h_x.data(), n * sizeof(float), cudaMemcpyHostToDevice);
 
-    float tIf = timeMs([&] { reluIf<<<blocks, threads>>>(d_x, d_y1, n); });
-    float tMax = timeMs([&] { reluMax<<<blocks, threads>>>(d_x, d_y2, n); });
+    std::cout << "--- tiny branch: ReLU ---\n";
+    std::vector<Bench> relu = {
+        {"relu with if", [&] { reluIf<<<blocks, threads>>>(d_x, d_y1, n); }, {}},
+        {"relu with fmaxf", [&] { reluMax<<<blocks, threads>>>(d_x, d_y2, n); }, {}},
+    };
+    runRounds(relu);
 
     std::vector<float> y1(n), y2(n);
     cudaMemcpy(y1.data(), d_y1, n * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(y2.data(), d_y2, n * sizeof(float), cudaMemcpyDeviceToHost);
-    bool same = (y1 == y2);
-
-    std::cout << "--- tiny branch: ReLU ---\n";
-    std::cout << "relu with if        : " << tIf << " ms\n";
-    std::cout << "relu with fmaxf     : " << tMax << " ms   " << (same ? "same output" : "DIFFERENT output") << "\n";
+    std::cout << "outputs " << (y1 == y2 ? "match" : "DIFFER") << "\n";
 
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) std::cout << "CUDA error: " << cudaGetErrorString(err) << "\n";

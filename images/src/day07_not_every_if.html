@@ -11,15 +11,15 @@
 <script src="sketch.js"></script>
 <script>
 fontsReady.then(() => {
-  title("not every if is bad", "day 07 · which branches actually cost you");
+  title("which ifs cost you", "day 07 · real numbers from a T4");
 
   const cards = [
     { x: 90, fill: COLORS.teal, head: "boundary check", code: ["if (i < n)", "  c[i] = a[i] + b[i];"],
       note: ["only the very last warp is", "split → basically free"] },
-    { x: 580, fill: COLORS.teal, head: "tiny branch", code: ["y = x > 0 ? x : 0;", "y = fmaxf(x, 0.0f);"],
-      note: ["compiler computes both + picks", "one (a 'select'), no jumping"] },
+    { x: 580, fill: COLORS.purple, head: "tiny branch (ReLU)", code: ["if (x > 0) y = x; else y = 0;", "y = fmaxf(x, 0.0f);"],
+      note: ["if: 0.197 ms, fmaxf: 0.140 ms", "→ I guessed a tie. fmaxf 1.4× faster"] },
     { x: 1070, fill: COLORS.coral, head: "big branch, split per thread", code: ["if (tid % 2) heavyA();", "else        heavyB();"],
-      note: ["the one that hurts: every", "warp pays A + B  (~2×)"] },
+      note: ["every warp pays A + B:", "6.68 ms vs A + B = 6.73 ms"] },
   ];
   for (const c of cards) {
     box(c.x, 250, 440, 380, { fill: c.fill });
@@ -31,9 +31,9 @@ fontsReady.then(() => {
     text(c.x + 25, 560, c.note[1], { size: 26 });
   }
 
-  text(90, 720, "the fix for the bad one: rearrange the work so whole warps take the same path", { size: 28 });
-  text(90, 765, "e.g. split by warp index (threadIdx.x / 32) instead of thread index", { size: 26, color: COLORS.muted });
-  underline(text(90, 840, "same work, same split, ~2× faster", { size: 32 }), COLORS.coral);
+  text(90, 715, "fix: split by warp (threadIdx.x / 32) so whole warps agree  →  6.68 → 5.25 ms (1.27×)", { size: 28 });
+  text(90, 758, "theory said 2×, but that's only when both paths cost the same (here B was 3.4× pricier than A)", { size: 24, color: COLORS.muted });
+  underline(text(90, 835, "measure, don't assume: 2 of my 3 guesses were off", { size: 32 }), COLORS.coral);
 });
 </script>
 </body>
