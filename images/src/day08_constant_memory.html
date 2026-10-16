@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+<style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("constant memory", "day 08 · 64 KB, read-only, built for everyone reading the same thing");
+
+  const S = 64, cx0 = 330, lx0 = 330;
+  function coefRow(y, hl) {
+    text(cx0 - 25, y + 42, "c_coef", { size: 24, color: COLORS.muted, anchor: "end" });
+    for (let k = 0; k < 8; k++)
+      box(cx0 + k * S, y, S, 60, { fill: hl(k) ? COLORS.teal : undefined, label: `c[${k}]`, size: 22 });
+  }
+  function laneRow(y) {
+    text(lx0 - 25, y + 42, "lanes", { size: 24, color: COLORS.muted, anchor: "end" });
+    for (let l = 0; l < 8; l++) box(lx0 + l * S, y, S, 60, { fill: COLORS.purple, label: `${l}`, size: 22 });
+  }
+
+  // ---- broadcast ----
+  text(120, 250, "every lane reads c[3]", { size: 30 });
+  coefRow(275, k => k === 3);
+  laneRow(445);
+  for (let l = 0; l < 8; l++) arrow(cx0 + 3 * S + S / 2, 338, lx0 + l * S + S / 2, 441, { head: 10 });
+  text(900, 340, "same address → ONE read,", { size: 30 });
+  text(900, 380, "handed to the whole warp at once", { size: 30 });
+  text(900, 425, "(a 'broadcast')  ✓", { size: 26, color: COLORS.muted });
+  text(900, 470, "measured on a T4: 0.56 ms", { size: 26 });
+
+  // ---- scattered ----
+  text(120, 565, "lane L reads c[L]", { size: 30 });
+  coefRow(585, () => true);
+  laneRow(715);
+  for (let l = 0; l < 8; l++) arrow(cx0 + l * S + S / 2, 648, lx0 + l * S + S / 2, 711, { head: 10 });
+  text(900, 640, "different addresses → reads", { size: 30 });
+  text(900, 680, "go one at a time  ✗", { size: 30 });
+  text(900, 720, "(the constant cache serves one address per step)", { size: 22, color: COLORS.muted });
+  text(900, 762, "measured: 8.57 ms  →  15× slower, same data, same math", { size: 26 });
+
+  underline(text(120, 850, "perfect for filter weights: same weight, same time, every thread  (and 1.26× faster than global here)", { size: 26 }), COLORS.coral);
+});
+</script>
+</body>
+</html>
