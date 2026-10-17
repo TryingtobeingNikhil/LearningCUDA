@@ -12,5 +12,6 @@ Writing GPU code every day and posting what I learn, with a hand-drawn diagram f
 | [06](day06) | SMs, warps, latency hiding, occupancy, grid-stride loops | [warps_and_sms.cu](day06/warps_and_sms.cu), [occupancy.cu](day06/occupancy.cu), [grid_stride.cu](day06/grid_stride.cu) |
 | [07](day07) | warp divergence, when branches cost you (and when they don't) | [warp_divergence.cu](day07/warp_divergence.cu) |
 | [08](day08) | constant memory (broadcast vs scattered), convolution with a halo | [constant_memory.cu](day08/constant_memory.cu) |
+| [09](day09) | parallel reduction: shared-memory tree, sequential addressing, two-pass | [reduction.cu](day09/reduction.cu) |
 
 Each day's folder has its own README with notes and diagrams.

@@ -1,0 +1,150 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+  <style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("reduction tree", "day 09 · how 8 threads sum 8 numbers in 3 rounds");
+
+  // -----------------------------------------------------------------------
+  // show the SEQUENTIAL (non-divergent) tree on 8 "threads" with values
+  // [3, 1, 4, 1, 5, 9, 2, 6]  → sum = 31
+  // -----------------------------------------------------------------------
+
+  const values = [3, 1, 4, 1, 5, 9, 2, 6];
+  const colors = [
+    COLORS.teal, COLORS.teal, COLORS.teal, COLORS.teal,
+    COLORS.teal, COLORS.teal, COLORS.teal, COLORS.teal,
+  ];
+
+  // ---- layout constants ----
+  const cellW  = 110;
+  const cellH  = 54;
+  const startX = 100;          // leftmost cell x
+  const gap    = 15;           // horizontal gap between cells
+
+  // row y-positions (baseline of the box)
+  const rowY = [230, 380, 510, 620];   // round 0 (input), round 1, round 2, round 3
+
+  // ---- row labels ----
+  text(startX - 10, rowY[0] + cellH / 2 + 10, "input", { size: 26, color: COLORS.muted, anchor: "end" });
+  text(startX - 10, rowY[1] + cellH / 2 + 10, "round 1\nstride=4", { size: 24, color: COLORS.muted, anchor: "end" });
+  text(startX - 10, rowY[2] + cellH / 2 + 10, "round 2\nstride=2", { size: 24, color: COLORS.muted, anchor: "end" });
+  text(startX - 10, rowY[3] + cellH / 2 + 10, "round 3\nstride=1", { size: 24, color: COLORS.muted, anchor: "end" });
+
+  // helper: x-center of cell i
+  function cx(i) { return startX + i * (cellW + gap) + cellW / 2; }
+
+  // ---- draw "shared memory" backdrop for all 8 slots ----
+  box(startX - 8, rowY[0] - 8, 8 * (cellW + gap) - gap + 16, cellH + 16,
+      { fill: COLORS.purple, strokeWidth: 1 });
+  text(startX + 8 * (cellW + gap) - gap + 30, rowY[0] + cellH / 2 + 10,
+       "shared mem", { size: 24, color: COLORS.purple });
+
+  // ---- round 0: input values ----
+  const r0vals = [...values];
+  for (let i = 0; i < 8; i++) {
+    box(startX + i * (cellW + gap), rowY[0], cellW, cellH,
+        { fill: COLORS.teal, label: String(r0vals[i]), size: 28 });
+    text(cx(i), rowY[0] - 14, "t" + i, { size: 22, color: COLORS.muted, anchor: "middle" });
+  }
+
+  // ---- round 1: stride=4 → threads 0..3 each add from t+4 ----
+  // sdata[0]+=sdata[4], sdata[1]+=sdata[5], sdata[2]+=sdata[6], sdata[3]+=sdata[7]
+  const r1vals = [3+5, 1+9, 4+2, 1+6, 5, 9, 2, 6];  // [8, 10, 6, 7, 5, 9, 2, 6]
+
+  for (let i = 0; i < 8; i++) {
+    const active = i < 4;
+    const col = active ? COLORS.teal : COLORS.muted;
+    box(startX + i * (cellW + gap), rowY[1], cellW, cellH,
+        { fill: col, label: active ? String(r1vals[i]) : "·", size: 28 });
+  }
+
+  // arrows from round0 → round1 for active pairs (i and i+4)
+  for (let i = 0; i < 4; i++) {
+    const x0 = cx(i);
+    const x4 = cx(i + 4);
+    const yTop = rowY[0] + cellH;
+    const yBot = rowY[1];
+    const ymid = (yTop + yBot) / 2;
+    // curve from t[i+4] down to t[i]
+    arrow(x4, yTop + 4, x0, yBot - 4, { stroke: COLORS.coral, head: 14, strokeWidth: 2 });
+    // straight from t[i]
+    line(x0, yTop + 4, x0, yBot - 4, { stroke: INK, strokeWidth: 1 });
+  }
+
+  // label "threads 0–3 active" in coral, horizontally centred over first 4
+  const bracketMid = (cx(0) + cx(3)) / 2;
+  const el1 = text(bracketMid, rowY[1] - 18, "threads 0–3 active (contiguous → no divergence)",
+      { size: 23, color: COLORS.coral, anchor: "middle" });
+
+  // ---- round 2: stride=2 → threads 0..1 each add from t+2 ----
+  const r2vals = [8+6, 10+7, 6, 7];
+  for (let i = 0; i < 4; i++) {
+    const active = i < 2;
+    const col = active ? COLORS.teal : COLORS.muted;
+    box(startX + i * (cellW + gap), rowY[2], cellW, cellH,
+        { fill: col, label: active ? String(r2vals[i]) : "·", size: 28 });
+  }
+  for (let i = 0; i < 2; i++) {
+    arrow(cx(i + 2), rowY[1] + cellH + 4, cx(i), rowY[2] - 4,
+          { stroke: COLORS.coral, head: 14, strokeWidth: 2 });
+    line(cx(i), rowY[1] + cellH + 4, cx(i), rowY[2] - 4, { stroke: INK, strokeWidth: 1 });
+  }
+  text((cx(0) + cx(1)) / 2, rowY[2] - 18, "threads 0–1 active",
+       { size: 23, color: COLORS.muted, anchor: "middle" });
+
+  // ---- round 3: stride=1 → thread 0 adds t1 ----
+  const r3val = 14 + 17;   // 31
+  box(startX, rowY[3], cellW, cellH,
+      { fill: COLORS.coral, label: String(r3val), size: 30 });
+  box(startX + (cellW + gap), rowY[3], cellW, cellH,
+      { fill: COLORS.muted, label: "·", size: 28 });
+  arrow(cx(1), rowY[2] + cellH + 4, cx(0), rowY[3] - 4,
+        { stroke: COLORS.coral, head: 14, strokeWidth: 2 });
+  line(cx(0), rowY[2] + cellH + 4, cx(0), rowY[3] - 4,
+       { stroke: INK, strokeWidth: 1 });
+
+  // "answer" label on result box
+  const ansEl = text(startX + cellW + 18, rowY[3] + cellH / 2 + 10,
+      "answer = 31", { size: 28, color: COLORS.coral });
+  underline(ansEl, COLORS.coral);
+
+  // ---- right side: key observation note ----
+  const nx = 1080;
+  const ny = 240;
+  box(nx, ny, 440, 340, { fill: COLORS.yellow, strokeWidth: 2 });
+  text(nx + 220, ny + 54,  "sequential addressing", { size: 26, anchor: "middle", weight: 700 });
+  text(nx + 30,  ny + 100, "stride halves each round:", { size: 23 });
+  text(nx + 30,  ny + 136, "  4 → 2 → 1", { size: 23 });
+  text(nx + 30,  ny + 184, "active threads are always", { size: 23 });
+  text(nx + 30,  ny + 218, "the first N/2, N/4, N/8...", { size: 23 });
+  text(nx + 30,  ny + 264, "→ one warp path, no divergence", { size: 22, color: COLORS.coral });
+
+  // "log₂(N) rounds" note below the tree
+  text(80, 808, "depth = log₂(N) rounds   →   8 threads done in 3 rounds, not 7",
+       { size: 26, color: COLORS.muted });
+
+  // measured result line
+  const measEl = text(80, 858,
+      "measured on T4 (N=16M):  sequential 1.36 ms  vs  interleaved 3.23 ms  =  2.37× faster",
+      { size: 24, color: COLORS.muted });
+  underline(measEl, COLORS.coral);
+
+  // __syncthreads() callout
+  text(1080, 660, "__syncthreads() after every round:", { size: 24, weight: 700 });
+  text(1080, 698, "wait for ALL threads to finish", { size: 23 });
+  text(1080, 734, "before the next stride starts", { size: 23 });
+  line(1080, 746, 1380, 746, { stroke: COLORS.muted, strokeWidth: 1 });
+  text(1080, 780, "miss it → data race, wrong answer", { size: 22, color: COLORS.coral });
+});
+</script>
+</body>
+</html>

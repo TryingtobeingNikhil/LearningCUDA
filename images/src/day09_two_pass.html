@@ -1,0 +1,124 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+  <style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("two-pass reduction", "day 09 · why one kernel isn't enough");
+
+  // -----------------------------------------------------------------------
+  // Diagram 2: shows the two-pass approach.
+  // Pass 1: many blocks, each reduces THREADS elements → one partial sum
+  // Pass 2: one block reduces all the partial sums → the final answer
+  // Also shows the divergence comparison note (numbers filled in later)
+  // -----------------------------------------------------------------------
+
+  // ---- TOP SECTION: two-pass flow ----
+
+  // CPU box
+  box(60, 220, 160, 60, { fill: COLORS.yellow, label: "CPU", size: 28 });
+  text(60, 300, "N = 16M floats", { size: 22, color: COLORS.muted });
+
+  // arrow to pass1 block
+  arrow(222, 250, 330, 250, { head: 16 });
+
+  // Pass 1: show three "block" boxes
+  const bW = 120, bH = 70;
+  const bY  = 215;
+  const bXs = [340, 480, 620];
+  for (let i = 0; i < 3; i++) {
+    box(bXs[i], bY, bW, bH, { fill: COLORS.teal, label: "block " + i, size: 22 });
+  }
+  // "..." after last block
+  text(760, bY + bH / 2 + 10, "…  65536 blocks", { size: 24, color: COLORS.muted });
+
+  // label pass 1
+  text(340, bY - 28, "pass 1  ·  each block sums 256 elements → one partial",
+       { size: 24, color: COLORS.teal });
+
+  // arrows from pass 1 blocks down to partials
+  const pY = 340;
+  for (let i = 0; i < 3; i++) {
+    arrow(bXs[i] + bW / 2, bY + bH, bXs[i] + bW / 2, pY, { head: 14 });
+  }
+
+  // partials row
+  const pW = 100, pH = 54;
+  for (let i = 0; i < 3; i++) {
+    box(bXs[i] + 10, pY, pW, pH, { fill: COLORS.purple, label: "p" + i, size: 24 });
+  }
+  text(760, pY + pH / 2 + 10, "…  65536 partial sums", { size: 22, color: COLORS.purple });
+  text(340, pY + pH + 14, "these live in global memory", { size: 21, color: COLORS.muted });
+
+  // arrow to pass 2
+  arrow(500, pY + pH + 42, 500, 470, { head: 14 });
+
+  // Pass 2: one block
+  box(390, 476, 220, 70, { fill: COLORS.teal, label: "1 final block", size: 24 });
+  text(390, 468, "pass 2  ·  one block sums all 65536 partials",
+       { size: 24, color: COLORS.teal });
+
+  // arrow to answer
+  arrow(500, 546, 500, 610, { head: 14 });
+  box(390, 616, 220, 60, { fill: COLORS.coral, label: "answer ✓", size: 26 });
+
+  // note: why two passes?
+  box(660, 470, 460, 220, { fill: COLORS.yellow, strokeWidth: 2 });
+  text(880, 506, "why two passes?", { size: 26, anchor: "middle", weight: 700 });
+  text(676, 542, "one block = 256 threads max", { size: 22 });
+  text(676, 576, "but N = 16M  →  need 65536 blocks", { size: 22 });
+  text(676, 614, "blocks can't talk to each other", { size: 22 });
+  text(676, 650, "in one launch — no global sync!", { size: 22 });
+  text(676, 686, "→ pass 2 gathers their results", { size: 22, color: COLORS.coral });
+
+  // -----------------------------------------------------------------------
+  // BOTTOM SECTION: measured results comparison
+  // -----------------------------------------------------------------------
+
+  const tableY = 688;
+  line(60, tableY, 1540, tableY, { stroke: COLORS.muted, strokeWidth: 1 });
+
+  text(60, tableY + 32, "measured on T4 — N=16M floats, 256 threads/block, 7 interleaved rounds, median:",
+       { size: 22, color: COLORS.muted });
+
+  // table-like layout
+  const cols = [60, 440, 720];
+  const rowH = 44;
+
+  // headers
+  text(cols[0], tableY + 70, "kernel", { size: 22, color: COLORS.muted });
+  text(cols[1], tableY + 70, "time (median)", { size: 22, color: COLORS.muted });
+  text(cols[2], tableY + 70, "vs sequential", { size: 22, color: COLORS.muted });
+
+  const rows = [
+    ["interleaved   (divergent tree)",  "3.23 ms", "2.37× slower"],
+    ["sequential    (no diverge)   ✓",  "1.36 ms", "baseline"],
+  ];
+
+  for (let r = 0; r < rows.length; r++) {
+    const y = tableY + 112 + r * rowH;
+    const isBaseline = rows[r][1] === "1.36 ms";
+    for (let c = 0; c < 3; c++) {
+      text(cols[c], y, rows[r][c], { size: 24, color: isBaseline ? COLORS.coral : INK });
+    }
+  }
+
+  // underline the key ratio
+  const ratioEl = text(720, tableY + 112, "2.37× slower",
+      { size: 24, color: INK });
+  underline(ratioEl, COLORS.coral);
+
+  text(60, tableY + 210,
+       "same number of adds, same 8 rounds — only the active-thread layout changed",
+       { size: 21, color: COLORS.muted });
+});
+</script>
+</body>
+</html>
