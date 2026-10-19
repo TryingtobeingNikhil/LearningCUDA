@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+  <style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("shuffle vs shared", "day 10 · why warp shuffle was 2.1× slower on 16M floats");
+
+  // -----------------------------------------------------------------------
+  // TOP SECTION: Diagram comparing the two approaches inside a block
+  // -----------------------------------------------------------------------
+
+  // --- Left Side: Shared Memory Tree (Day 09) ---
+  const leftX = 80;
+  box(leftX, 210, 440, 290, { fill: COLORS.teal, strokeWidth: 2 });
+  text(leftX + 220, 250, "shared_reduce (Day 09)", { size: 28, weight: 700, anchor: "middle" });
+  text(leftX + 25, 290, "• all 256 threads load into shared memory", { size: 21 });
+  text(leftX + 25, 325, "• 8 tree steps (stride halves: 128 → 1)", { size: 21 });
+  text(leftX + 25, 360, "• all 8 warps participate in early steps", { size: 21 });
+  text(leftX + 25, 395, "• high parallelism hides memory latency", { size: 21 });
+  text(leftX + 25, 440, "→ 1.37 ms (predictable, steady)", { size: 24, color: COLORS.coral, weight: 700 });
+
+  // --- Center: Shuffle + Shared Mix (Day 10) ---
+  const midX = 560;
+  box(midX, 210, 470, 290, { fill: COLORS.purple, strokeWidth: 2 });
+  text(midX + 235, 250, "shuffle_reduce (hierarchical)", { size: 28, weight: 700, anchor: "middle" });
+  text(midX + 25, 290, "1. 5 serial shuffles inside each warp", { size: 21 });
+  text(midX + 45, 320, "(15–20 cycle latency per dependent step)", { size: 19, color: COLORS.muted });
+  text(midX + 25, 355, "2. lane 0 writes to 8-slot shared array", { size: 21 });
+  text(midX + 25, 390, "3. __syncthreads() + warp 0 reduces the 8 slots", { size: 21 });
+  text(midX + 45, 420, "(warps 1–7 sit completely idle!)", { size: 19, color: COLORS.coral });
+  text(midX + 25, 460, "→ 2.88 ms (2.1× slower)", { size: 24, color: COLORS.coral, weight: 700 });
+
+  // --- Right Side: The Diagnosis Box ---
+  const rightX = 1070;
+  box(rightX, 210, 450, 290, { fill: COLORS.yellow, strokeWidth: 2 });
+  text(rightX + 225, 250, "why did shuffle lose?", { size: 28, weight: 700, anchor: "middle" });
+  text(rightX + 25, 295, "1. Bandwidth bound: 64 MB from DRAM", { size: 21 });
+  text(rightX + 45, 325, "dominates run time either way", { size: 19, color: COLORS.muted });
+  text(rightX + 25, 360, "2. Dependent latency chain in shuffles", { size: 21 });
+  text(rightX + 45, 390, "5 dependent ops per warp stall execution", { size: 19, color: COLORS.muted });
+  text(rightX + 25, 425, "3. Cross-warp tail serialization", { size: 21 });
+  text(rightX + 45, 455, "warp 0 does final work while 87% idle", { size: 19, color: COLORS.coral });
+
+  // -----------------------------------------------------------------------
+  // MIDDLE: When does shuffle actually win?
+  // -----------------------------------------------------------------------
+  const midY = 530;
+  box(leftX, midY, 1440, 110, { fill: COLORS.yellow, strokeWidth: 2 });
+  text(leftX + 30, midY + 40, "rule of thumb: when DOES warp shuffle win?", { size: 25, weight: 700, color: COLORS.coral });
+  text(leftX + 30, midY + 75, "When work fits inside ONE warp (32 threads) — e.g. dot product, warp-level softmax, argmax.", { size: 22 });
+  text(leftX + 30, midY + 100, "There, shared memory is 100% eliminated, no __syncthreads() needed, zero smem footprint!", { size: 21, color: COLORS.muted });
+
+  // -----------------------------------------------------------------------
+  // BOTTOM SECTION: measured results comparison table
+  // -----------------------------------------------------------------------
+  const tableY = 670;
+  line(leftX, tableY, 1520, tableY, { stroke: COLORS.muted, strokeWidth: 1 });
+
+  text(leftX, tableY + 30, "measured on T4 (N = 16M floats, 256 threads/block, 7 interleaved rounds):",
+       { size: 22, color: COLORS.muted });
+
+  const cols = [leftX, leftX + 400, leftX + 700, leftX + 960];
+  const rowH = 40;
+
+  // headers
+  text(cols[0], tableY + 70, "kernel", { size: 22, color: COLORS.muted });
+  text(cols[1], tableY + 70, "median time", { size: 22, color: COLORS.muted });
+  text(cols[2], tableY + 70, "spread", { size: 22, color: COLORS.muted });
+  text(cols[3], tableY + 70, "vs baseline", { size: 22, color: COLORS.muted });
+
+  const rows = [
+    ["shared_reduce  (Day 09)", "1.37 ms", "1.367 – 1.403 ms", "baseline (fastest)"],
+    ["shuffle_reduce (Day 10)", "2.88 ms", "2.811 – 2.884 ms", "2.10× slower"],
+  ];
+
+  for (let r = 0; r < rows.length; r++) {
+    const y = tableY + 110 + r * rowH;
+    const isBaseline = r === 0;
+    const color = isBaseline ? COLORS.teal : COLORS.coral;
+    text(cols[0], y, rows[r][0], { size: 24, color: INK });
+    text(cols[1], y, rows[r][1], { size: 24, color: color, weight: 700 });
+    text(cols[2], y, rows[r][2], { size: 22, color: COLORS.muted });
+    text(cols[3], y, rows[r][3], { size: 24, color: color, weight: isBaseline ? 400 : 700 });
+  }
+
+  const slowEl = text(cols[3], tableY + 110 + rowH, "2.10× slower", { size: 24, color: COLORS.coral, weight: 700 });
+  underline(slowEl, COLORS.coral);
+});
+</script>
+</body>
+</html>

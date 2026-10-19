@@ -1,0 +1,130 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+  <style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("warp shuffle", "day 10 · 8 lanes → 1 sum in 3 rounds (no shared memory)");
+
+  // -----------------------------------------------------------------------
+  // Show __shfl_down_sync on 8 lanes (abstraction of the real 32-lane case)
+  // values: [3, 1, 4, 1, 5, 9, 2, 6]  sum = 31
+  // round 1: offset=4  → lane 0 += lane 4, etc.
+  // round 2: offset=2  → lane 0 += lane 2, etc.
+  // round 3: offset=1  → lane 0 += lane 1
+  // -----------------------------------------------------------------------
+
+  const laneW = 95, laneH = 54, gap = 8;
+  const startX = 60;
+  const rowY = [210, 360, 490, 600];
+
+  // ---- lane labels ----
+  for (let i = 0; i < 8; i++) {
+    text(startX + i * (laneW + gap) + laneW / 2, rowY[0] - 18,
+         "lane " + i, { size: 20, color: COLORS.muted, anchor: "middle" });
+  }
+
+  // row labels
+  const labelX = startX - 14;
+  text(labelX, rowY[0] + laneH / 2 + 10, "start", { size: 24, color: COLORS.muted, anchor: "end" });
+  text(labelX, rowY[1] + laneH / 2 + 10, "offset=4", { size: 24, color: COLORS.muted, anchor: "end" });
+  text(labelX, rowY[2] + laneH / 2 + 10, "offset=2", { size: 24, color: COLORS.muted, anchor: "end" });
+  text(labelX, rowY[3] + laneH / 2 + 10, "offset=1", { size: 24, color: COLORS.muted, anchor: "end" });
+
+  function cx(i) { return startX + i * (laneW + gap) + laneW / 2; }
+
+  // ---- row 0: input ----
+  const r0 = [3, 1, 4, 1, 5, 9, 2, 6];
+  for (let i = 0; i < 8; i++) {
+    box(startX + i * (laneW + gap), rowY[0], laneW, laneH,
+        { fill: COLORS.purple, label: String(r0[i]), size: 28 });
+  }
+  text(startX + 8 * (laneW + gap) + 12, rowY[0] + laneH / 2 - 4,
+       "registers", { size: 22, color: COLORS.purple });
+  text(startX + 8 * (laneW + gap) + 12, rowY[0] + laneH / 2 + 20,
+       "(no smem!)", { size: 19, color: COLORS.muted });
+
+  // ---- row 1: after offset=4 ----
+  // val += __shfl_down_sync(mask, val, 4)
+  // lane i gets val from lane i+4
+  const r1 = [3+5, 1+9, 4+2, 1+6, 5, 9, 2, 6];
+  for (let i = 0; i < 8; i++) {
+    const active = i < 4;
+    box(startX + i * (laneW + gap), rowY[1], laneW, laneH,
+        { fill: active ? COLORS.purple : COLORS.muted,
+          label: active ? String(r1[i]) : "·", size: 28 });
+  }
+  // arrows: lane i+4 → lane i (shfl_down reads from i+offset)
+  for (let i = 0; i < 4; i++) {
+    arrow(cx(i + 4), rowY[0] + laneH + 4, cx(i), rowY[1] - 4,
+          { stroke: COLORS.coral, head: 14, strokeWidth: 2 });
+    line(cx(i), rowY[0] + laneH + 4, cx(i), rowY[1] - 4,
+         { stroke: INK, strokeWidth: 1 });
+  }
+  text((cx(0) + cx(3)) / 2, rowY[1] - 18,
+       "__shfl_down_sync(mask, val, 4)  →  lane i reads from lane i+4",
+       { size: 21, color: COLORS.coral, anchor: "middle" });
+
+  // ---- row 2: after offset=2 ----
+  const r2 = [8+6, 10+7, 6, 7, 5, 9, 2, 6];
+  for (let i = 0; i < 4; i++) {
+    const active = i < 2;
+    box(startX + i * (laneW + gap), rowY[2], laneW, laneH,
+        { fill: active ? COLORS.purple : COLORS.muted,
+          label: active ? String(r2[i]) : "·", size: 28 });
+  }
+  for (let i = 0; i < 2; i++) {
+    arrow(cx(i + 2), rowY[1] + laneH + 4, cx(i), rowY[2] - 4,
+          { stroke: COLORS.coral, head: 14, strokeWidth: 2 });
+    line(cx(i), rowY[1] + laneH + 4, cx(i), rowY[2] - 4,
+         { stroke: INK, strokeWidth: 1 });
+  }
+  text((cx(0) + cx(1)) / 2, rowY[2] - 18,
+       "offset=2", { size: 21, color: COLORS.muted, anchor: "middle" });
+
+  // ---- row 3: after offset=1 ----
+  box(startX, rowY[3], laneW, laneH,
+      { fill: COLORS.coral, label: "31", size: 30 });
+  box(startX + (laneW + gap), rowY[3], laneW, laneH,
+      { fill: COLORS.muted, label: "·", size: 28 });
+  arrow(cx(1), rowY[2] + laneH + 4, cx(0), rowY[3] - 4,
+        { stroke: COLORS.coral, head: 14, strokeWidth: 2 });
+  line(cx(0), rowY[2] + laneH + 4, cx(0), rowY[3] - 4,
+       { stroke: INK, strokeWidth: 1 });
+
+  const ansEl = text(startX + 2 * (laneW + gap) + 20, rowY[3] + laneH / 2 + 10,
+      "lane 0 = warp sum (31)", { size: 26, color: COLORS.coral });
+  underline(ansEl, COLORS.coral);
+
+  // ---- right side: key notes ----
+  const nx = 1010, ny = 200;
+  box(nx, ny, 520, 420, { fill: COLORS.yellow, strokeWidth: 2 });
+
+  text(nx + 224, ny + 50, "__shfl_down_sync", { size: 27, anchor: "middle", weight: 700,
+       font: "'Caveat', cursive" });
+  text(nx + 20, ny + 96,  "no __syncthreads needed", { size: 23 });
+  text(nx + 20, ny + 132, "warp = always in lock-step", { size: 23 });
+  text(nx + 20, ny + 180, "works on ANY value type:", { size: 22 });
+  text(nx + 20, ny + 214, "  float, int, double", { size: 22 });
+  text(nx + 20, ny + 262, "mask = 0xffffffff", { size: 22 });
+  text(nx + 20, ny + 296, "  → all 32 lanes active", { size: 22, color: COLORS.muted });
+  text(nx + 20, ny + 344, "real warp = 32 lanes:", { size: 22 });
+  text(nx + 20, ny + 378, "  5 rounds, not 3", { size: 22, color: COLORS.muted });
+
+  // ---- bottom note: measured ----
+  text(80, 822, "register → register transfer inside one warp, one instruction per round",
+       { size: 24, color: COLORS.muted });
+  const measEl = text(80, 862,
+      "measured on T4 (N=16M):  shared_reduce 1.37 ms  vs  shuffle_reduce 2.88 ms  →  see diagram 2",
+      { size: 22, color: COLORS.muted });
+});
+</script>
+</body>
+</html>

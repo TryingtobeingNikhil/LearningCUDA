@@ -13,5 +13,6 @@ Writing GPU code every day and posting what I learn, with a hand-drawn diagram f
 | [07](day07) | warp divergence, when branches cost you (and when they don't) | [warp_divergence.cu](day07/warp_divergence.cu) |
 | [08](day08) | constant memory (broadcast vs scattered), convolution with a halo | [constant_memory.cu](day08/constant_memory.cu) |
 | [09](day09) | parallel reduction: shared-memory tree, sequential addressing, two-pass | [reduction.cu](day09/reduction.cu) |
+| [10](day10) | warp shuffles: __shfl_down_sync, warp-level reduction vs shared memory | [warp_shuffle.cu](day10/warp_shuffle.cu) |
 
 Each day's folder has its own README with notes and diagrams.
