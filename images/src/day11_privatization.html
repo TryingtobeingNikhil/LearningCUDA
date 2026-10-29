@@ -1,0 +1,116 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+  <style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("privatization", "day 11 · private scratchpads turn global bottlenecks into local speed");
+
+  // =======================================================================
+  // TOP ROW: Privatized Shared Memory Architecture
+  // =======================================================================
+
+  // --- Block 0 Box ---
+  const b0X = 80, bY = 200, bW = 430, bH = 285;
+  box(b0X, bY, bW, bH, { fill: COLORS.teal, strokeWidth: 2 });
+  text(b0X + bW / 2, bY + 38, "BLOCK 0  (SM 0)", { size: 26, weight: 700, anchor: "middle" });
+
+  box(b0X + 25, bY + 65, bW - 50, 60, { fill: COLORS.purple, strokeWidth: 2 });
+  text(b0X + bW / 2, bY + 102, "__shared__ s_bins[256]", { size: 22, color: COLORS.purple, weight: 700, anchor: "middle" });
+
+  text(b0X + 25, bY + 160, "• 256 threads accumulate locally", { size: 21 });
+  text(b0X + 45, bY + 190, "atomicAdd(&s_bins[val], 1)", { size: 19, color: COLORS.teal });
+  text(b0X + 25, bY + 225, "• on-chip SRAM: ~1-2 cycle latency", { size: 21 });
+  text(b0X + 25, bY + 258, "• zero interference with other blocks!", { size: 21, color: COLORS.coral });
+
+
+  // --- Block 1 Box ---
+  const b1X = 540;
+  box(b1X, bY, bW, bH, { fill: COLORS.teal, strokeWidth: 2 });
+  text(b1X + bW / 2, bY + 38, "BLOCK 1  (SM 1)", { size: 26, weight: 700, anchor: "middle" });
+
+  box(b1X + 25, bY + 65, bW - 50, 60, { fill: COLORS.purple, strokeWidth: 2 });
+  text(b1X + bW / 2, bY + 102, "__shared__ s_bins[256]", { size: 22, color: COLORS.purple, weight: 700, anchor: "middle" });
+
+  text(b1X + 25, bY + 160, "• independent private copy in its SM", { size: 21 });
+  text(b1X + 45, bY + 190, "atomicAdd(&s_bins[val], 1)", { size: 19, color: COLORS.teal });
+  text(b1X + 25, bY + 225, "• contention is localized to 256 threads", { size: 21 });
+  text(b1X + 25, bY + 258, "• fast hardware ALU shared atomics", { size: 21, color: COLORS.muted });
+
+
+  // --- Global Memory Commit Box ---
+  const gX = 1040, gW = 480;
+  box(gX, bY, gW, bH, { fill: COLORS.yellow, strokeWidth: 2 });
+  text(gX + gW / 2, bY + 38, "GLOBAL MEMORY (DRAM)", { size: 26, weight: 700, anchor: "middle" });
+
+  box(gX + 25, bY + 65, gW - 50, 60, { fill: COLORS.coral, strokeWidth: 2 });
+  text(gX + gW / 2, bY + 102, "final bins[256] in DRAM", { size: 22, color: COLORS.coral, weight: 700, anchor: "middle" });
+
+  text(gX + 25, bY + 160, "after __syncthreads(), commit once:", { size: 21, weight: 700 });
+  text(gX + 40, bY + 192, "atomicAdd(&d_bins[tid], s_bins[tid]);", { size: 19, color: INK });
+  text(gX + 25, bY + 230, "• 64 blocks × 256 bins = 16,384 global atomics", { size: 20 });
+  text(gX + 25, bY + 262, "  (vs 16,777,216 without privatization — 1000× drop!)", { size: 19, color: COLORS.coral });
+
+  // commit arrows from blocks to global
+  arrow(b0X + bW, bY + 95, gX - 10, bY + 80, { head: 14, stroke: COLORS.purple, strokeWidth: 2 });
+  arrow(b1X + bW, bY + 95, gX - 10, bY + 95, { head: 14, stroke: COLORS.purple, strokeWidth: 2 });
+
+
+  // =======================================================================
+  // MIDDLE: Rule of Thumb Box
+  // =======================================================================
+  const midY = 510;
+  box(b0X, midY, 1440, 85, { fill: COLORS.yellow, strokeWidth: 2 });
+  text(b0X + 30, midY + 36, "rule of thumb: when does privatization win?", { size: 24, weight: 700, color: COLORS.coral });
+  text(b0X + 30, midY + 66, "When output state is SMALL (fits in shared memory, like 256 bins) and input data is HUGE (millions of elements).", { size: 21 });
+
+
+  // =======================================================================
+  // BOTTOM SECTION: Measured Benchmark Table (Values generated at last)
+  // =======================================================================
+  const tableY = 625;
+  line(b0X, tableY, 1520, tableY, { stroke: COLORS.muted, strokeWidth: 1 });
+
+  text(b0X, tableY + 28, "measured on Tesla T4 (N = 16M bytes, 256 bins, 7 interleaved rounds, median reported):",
+       { size: 21, color: COLORS.muted });
+
+  const cols = [b0X, b0X + 410, b0X + 680, b0X + 960];
+  const rowH = 38;
+
+  // headers
+  text(cols[0], tableY + 64, "kernel", { size: 21, color: COLORS.muted });
+  text(cols[1], tableY + 64, "median time", { size: 21, color: COLORS.muted });
+  text(cols[2], tableY + 64, "spread", { size: 21, color: COLORS.muted });
+  text(cols[3], tableY + 64, "speedup", { size: 21, color: COLORS.muted });
+
+  const rows = [
+    ["global_atomic      (Day 11 baseline)", "5.438 ms", "5.436 – 5.441 ms", "baseline (heavy contention)"],
+    ["shared_privatized  (shared atomics)",  "0.700 ms", "0.699 – 0.700 ms", "7.77× faster"],
+    ["shared_vectorized4 (uint32_t loads)",  "0.206 ms", "0.206 – 0.207 ms", "26.34× faster"],
+  ];
+
+  for (let r = 0; r < rows.length; r++) {
+    const y = tableY + 102 + r * rowH;
+    const isBase = r === 0;
+    const isTop  = r === 2;
+    const color  = isBase ? COLORS.muted : (isTop ? COLORS.coral : COLORS.teal);
+
+    text(cols[0], y, rows[r][0], { size: 22, color: INK });
+    text(cols[1], y, rows[r][1], { size: 22, color: color, weight: isBase ? 400 : 700 });
+    text(cols[2], y, rows[r][2], { size: 20, color: COLORS.muted });
+    text(cols[3], y, rows[r][3], { size: 22, color: color, weight: isBase ? 400 : 700 });
+  }
+
+  const speedupEl = text(cols[3], tableY + 102 + 2 * rowH, "26.34× faster", { size: 22, color: COLORS.coral, weight: 700 });
+  underline(speedupEl, COLORS.coral);
+});
+</script>
+</body>
+</html>

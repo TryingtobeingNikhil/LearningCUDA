@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+  <style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("atomics & contention", "day 11 · why thousands of threads stall on 256 bins");
+
+  // =======================================================================
+  // TOP ROW: Race Condition vs atomicAdd
+  // =======================================================================
+
+  // --- Left: Race condition on plain count++ ---
+  const leftX = 80;
+  box(leftX, 190, 680, 260, { fill: COLORS.coral, strokeWidth: 2 });
+  text(leftX + 340, 230, "the race condition: plain count++", { size: 28, weight: 700, anchor: "middle" });
+
+  text(leftX + 30, 275, "thread 0 and thread 1 both see value '3' at the exact same cycle:", { size: 21 });
+
+  // sequence of events
+  text(leftX + 50, 315, "1. thread 0 reads bins[3]  (= 10)", { size: 21, color: COLORS.muted });
+  text(leftX + 380, 315, "thread 1 reads bins[3]  (= 10)", { size: 21, color: COLORS.muted });
+
+  text(leftX + 50, 350, "2. thread 0 adds 1         (= 11)", { size: 21, color: COLORS.muted });
+  text(leftX + 380, 350, "thread 1 adds 1         (= 11)", { size: 21, color: COLORS.muted });
+
+  text(leftX + 50, 385, "3. thread 0 writes 11 back", { size: 21, color: COLORS.coral });
+  text(leftX + 380, 385, "thread 1 writes 11 back", { size: 21, color: COLORS.coral });
+
+  text(leftX + 340, 425, "result = 11, should be 12!  (one update is lost forever)", { size: 22, color: COLORS.coral, weight: 700, anchor: "middle" });
+
+
+  // --- Right: atomicAdd hardware serialization ---
+  const rightX = 840;
+  box(rightX, 190, 680, 260, { fill: COLORS.teal, strokeWidth: 2 });
+  text(rightX + 340, 230, "the fix: atomicAdd(&bins[3], 1)", { size: 28, weight: 700, anchor: "middle" });
+
+  text(rightX + 30, 275, "read-modify-write is locked as one indivisible hardware step:", { size: 21 });
+
+  text(rightX + 50, 320, "1. thread 0 grabs address, increments:  10  →  11", { size: 22, color: COLORS.teal });
+  text(rightX + 50, 360, "2. thread 1 is forced to WAIT in hardware queue...", { size: 22, color: COLORS.muted });
+  text(rightX + 50, 400, "3. thread 1 now reads 11 and increments: 11  →  12  ✓", { size: 22, color: COLORS.teal });
+
+  text(rightX + 340, 435, "correct! but notice: thread 1 had to wait", { size: 20, color: COLORS.muted, anchor: "middle" });
+
+
+  // =======================================================================
+  // BOTTOM SECTION: Global Atomics Contention (Traffic Jam)
+  // =======================================================================
+  const botY = 480;
+  box(leftX, botY, 1440, 340, { fill: COLORS.yellow, strokeWidth: 2 });
+
+  text(leftX + 40, botY + 45, "the bottleneck: global memory contention", { size: 30, weight: 700 });
+  text(leftX + 40, botY + 80, "when 65,536 parallel threads all hammer the SAME 256 global addresses:", { size: 22, color: COLORS.muted });
+
+  // Draw 4 thread circles on the left
+  const thY = botY + 160;
+  const thXs = [180, 270, 360, 450];
+  for (let i = 0; i < 4; i++) {
+    circle(thXs[i], thY, 52, { fill: COLORS.teal, label: "T" + i, size: 24 });
+  }
+  text(530, thY + 8, "… 65k threads", { size: 24, color: COLORS.muted });
+
+  // Draw funnel queue box in the middle
+  const qX = 720, qY = botY + 115, qW = 280, qH = 95;
+  box(qX, qY, qW, qH, { fill: COLORS.coral, strokeWidth: 2 });
+  text(qX + qW / 2, qY + 36, "HARDWARE QUEUE", { size: 22, color: COLORS.coral, weight: 700, anchor: "middle" });
+  text(qX + qW / 2, qY + 68, "one thread per bin at a time", { size: 20, color: INK, anchor: "middle" });
+
+  // arrows from threads into queue
+  arrow(490, thY, qX - 10, qY + qH / 2, { head: 14, stroke: COLORS.coral });
+
+  // Global memory bins on the right
+  const binX = 1100, binY = botY + 120, binW = 360, binH = 85;
+  box(binX, binY, binW, binH, { fill: COLORS.purple, strokeWidth: 2 });
+  text(binX + binW / 2, binY + 35, "GLOBAL MEMORY (DRAM / L2)", { size: 22, color: COLORS.purple, weight: 700, anchor: "middle" });
+  text(binX + binW / 2, binY + 65, "only 256 bins  (200–400 cycle latency)", { size: 19, color: COLORS.muted, anchor: "middle" });
+
+  arrow(qX + qW + 10, qY + qH / 2, binX - 10, binY + binH / 2, { head: 14 });
+
+  // 3 crisp summary notes below the diagram
+  text(leftX + 40, botY + 245, "• thousands of threads serialize in line waiting for L2 cache / DRAM controllers", { size: 22 });
+  text(leftX + 40, botY + 280, "• the GPU's 40 SMs sit stalled: compute pipelines starve while memory queues back up", { size: 22 });
+
+  const takeEl = text(leftX + 40, botY + 315, "takeaway: global atomics give correctness, but heavy contention destroys GPU throughput",
+                      { size: 23, color: COLORS.coral, weight: 700 });
+  underline(takeEl, COLORS.coral);
+});
+</script>
+</body>
+</html>
