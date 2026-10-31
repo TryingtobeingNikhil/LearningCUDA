@@ -1,0 +1,123 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+  <style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("hierarchical scan", "day 13 · 3 passes to scan 1M elements without global sync");
+
+  // =======================================================================
+  // LEFT COLUMN: 3-Pass Hierarchical Scan Architecture
+  // =======================================================================
+  const leftX = 80, colW = 730, topY = 190, boxH = 485;
+  box(leftX, topY, colW, boxH, { fill: COLORS.teal, strokeWidth: 2 });
+
+  text(leftX + colW / 2, topY + 38, "The 3-Pass Hierarchical Architecture", { size: 28, weight: 700, anchor: "middle" });
+  text(leftX + colW / 2, topY + 68, "N = 1M elements · 1024 blocks of 1024 threads", { size: 20, color: COLORS.muted, anchor: "middle" });
+
+  // Pass 1: Local Scan
+  const p1Y = topY + 105;
+  text(leftX + 30, p1Y + 22, "Pass 1: Local Block Scans", { size: 22, weight: 700, color: COLORS.teal });
+  text(leftX + 30, p1Y + 48, "Each block scans 1024 elements in shared memory", { size: 19, color: COLORS.muted });
+
+  const bW = 100, bH = 50, bGap = 20;
+  const bX0 = leftX + 40;
+  for (let i = 0; i < 3; i++) {
+    box(bX0 + i * (bW + bGap), p1Y + 65, bW, bH, { fill: COLORS.teal, label: "Block " + i, size: 20 });
+  }
+  text(bX0 + 3 * (bW + bGap) + 10, p1Y + 98, "… 1024 blocks", { size: 20, color: COLORS.muted });
+
+  // arrows down to block sums
+  for (let i = 0; i < 3; i++) {
+    arrow(bX0 + i * (bW + bGap) + bW / 2, p1Y + 65 + bH,
+          bX0 + i * (bW + bGap) + bW / 2, p1Y + 160, { head: 10, stroke: COLORS.purple });
+  }
+
+  // Pass 2: Scan Block Sums
+  const p2Y = p1Y + 165;
+  text(leftX + 30, p2Y + 22, "Pass 2: Scan Block Sums (1 block of 1024 threads)", { size: 22, weight: 700, color: COLORS.purple });
+  text(leftX + 30, p2Y + 48, "Scans the 1024 totals → computes exclusive block offsets", { size: 19, color: COLORS.muted });
+
+  for (let i = 0; i < 3; i++) {
+    box(bX0 + i * (bW + bGap), p2Y + 60, bW, 42, { fill: COLORS.purple, label: "offset " + i, size: 18 });
+  }
+  text(bX0 + 3 * (bW + bGap) + 10, p2Y + 86, "… 1024 offsets", { size: 20, color: COLORS.muted });
+
+  // Pass 3: Add Offsets
+  const p3Y = p2Y + 125;
+  text(leftX + 30, p3Y + 22, "Pass 3: Add Offsets", { size: 22, weight: 700, color: COLORS.coral });
+  text(leftX + 30, p3Y + 48, "out[i] += blockOffsets[blockIdx.x]  →  global scan finished!", { size: 19, color: INK });
+
+  // summary note
+  text(leftX + 30, topY + 460, "• zero inter-block communication: 3 kernel launches act as global barriers", { size: 20, color: COLORS.teal });
+
+
+  // =======================================================================
+  // RIGHT COLUMN: Stream Compaction (Filter Without Atomics)
+  // =======================================================================
+  const rightX = 840;
+  box(rightX, topY, colW, boxH, { fill: COLORS.purple, strokeWidth: 2 });
+
+  text(rightX + colW / 2, topY + 38, "Stream Compaction: Filtering via Scan", { size: 28, weight: 700, anchor: "middle" });
+  text(rightX + colW / 2, topY + 68, "Keep positive numbers · zero atomics · deterministic stable order", { size: 20, color: COLORS.muted, anchor: "middle" });
+
+  // Walkthrough table
+  const cY = topY + 110;
+  const cElemW = 75, cElemH = 42, cGap = 12;
+  const cStartX = rightX + 130;
+
+  const steps = [
+    { label: "1. input", vals: ["3", "-1", "4", "-2", "5", "1"], fill: COLORS.purple },
+    { label: "2. flags (>0)", vals: ["1", "0", "1", "0", "1", "1"], fill: COLORS.yellow },
+    { label: "3. excl scan", vals: ["0", "1", "1", "2", "2", "3"], fill: COLORS.teal },
+    { label: "4. compact out", vals: ["3", "4", "5", "1", "·", "·"], fill: COLORS.coral }
+  ];
+
+  for (let s = 0; s < steps.length; s++) {
+    const rowY = cY + s * 68;
+    text(cStartX - 15, rowY + 28, steps[s].label, { size: 21, weight: 700, anchor: "end", color: INK });
+    for (let i = 0; i < 6; i++) {
+      box(cStartX + i * (cElemW + cGap), rowY, cElemW, cElemH,
+          { fill: steps[s].fill, label: steps[s].vals[i], size: 22 });
+    }
+  }
+
+  // Arrows from input to output for kept elements
+  const kept = [0, 2, 4, 5];
+  const dest = [0, 1, 2, 3];
+  for (let k = 0; k < kept.length; k++) {
+    const srcX = cStartX + kept[k] * (cElemW + cGap) + cElemW / 2;
+    const dstX = cStartX + dest[k] * (cElemW + cGap) + cElemW / 2;
+    arrow(srcX, cY + 44, dstX, cY + 3 * 68 - 4, { head: 8, stroke: COLORS.coral, strokeWidth: 1.5 });
+  }
+
+  // Compaction takeaways
+  text(rightX + 30, topY + 410, "• flags exclusive scan computes collision-free output addresses", { size: 20 });
+  text(rightX + 30, topY + 438, "• atomicAdd baseline: 500k threads contend on 1 address (L2 jam)", { size: 20, color: COLORS.coral });
+  text(rightX + 30, topY + 465, "• scan-based: 100% collision-free, stable, and parallel!", { size: 20, color: COLORS.teal, weight: 700 });
+
+
+  // =======================================================================
+  // BOTTOM BOX: The Core Hardware Principle
+  // =======================================================================
+  const botY = 700, botH = 150;
+  box(leftX, botY, 1490, botH, { fill: COLORS.yellow, strokeWidth: 2 });
+
+  text(leftX + 30, botY + 38, "the GPU paradigm: kernel launches as global barriers", { size: 26, weight: 700, color: COLORS.coral });
+  text(leftX + 30, botY + 74, "• Inside a block, threads sync with __syncthreads(). Across blocks, CUDA provides no hardware barrier.", { size: 21 });
+  text(leftX + 30, botY + 104, "• Ending a kernel launch guarantees all global writes are visible in L2/DRAM before the next kernel starts.", { size: 21 });
+
+  const takeEl = text(leftX + 30, botY + 134, "takeaway: 3 lightweight kernel passes turn 1024 local scans into a full 1M-element global prefix sum",
+                      { size: 22, color: COLORS.coral, weight: 700 });
+  underline(takeEl, COLORS.coral);
+});
+</script>
+</body>
+</html>

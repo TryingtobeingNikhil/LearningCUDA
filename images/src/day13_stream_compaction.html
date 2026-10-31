@@ -1,0 +1,92 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+  <style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("stream compaction", "day 13 · scan-based filtering vs atomicAdd on 1M floats (Tesla T4)");
+
+  // =======================================================================
+  // TOP SECTION: Side-by-Side Comparison
+  // =======================================================================
+
+  // --- Left: atomicAdd Baseline ---
+  const leftX = 80, boxW = 690, topY = 200, boxH = 340;
+  box(leftX, topY, boxW, boxH, { fill: COLORS.coral, strokeWidth: 2 });
+  text(leftX + boxW / 2, topY + 40, "compact_atomic (Naive Baseline)", { size: 28, weight: 700, anchor: "middle" });
+  text(leftX + boxW / 2, topY + 70, "atomicAdd(counter, 1) per positive element", { size: 20, color: COLORS.muted, anchor: "middle" });
+
+  text(leftX + 30, topY + 115, "• 524,288 threads all hammer a single 4-byte counter", { size: 21 });
+  text(leftX + 30, topY + 150, "• severe L2 cache contention & hardware serialization", { size: 21, color: COLORS.coral });
+  text(leftX + 30, topY + 185, "• non-deterministic arrival: output order is scrambled!", { size: 21 });
+  text(leftX + 30, topY + 220, "• simple 1-pass code, but memory controllers stall", { size: 21, color: COLORS.muted });
+  text(leftX + 30, topY + 270, "→ 0.455 ms  (baseline)", { size: 25, color: COLORS.coral, weight: 700 });
+  text(leftX + 30, topY + 305, "heavy atomic contention slows down the entire grid", { size: 19, color: COLORS.muted });
+
+
+  // --- Right: Scan-Based Compaction ---
+  const rightX = 830;
+  box(rightX, topY, boxW, boxH, { fill: COLORS.teal, strokeWidth: 2 });
+  text(rightX + boxW / 2, topY + 40, "compact_scan (Scan-Based)", { size: 28, weight: 700, anchor: "middle" });
+  text(rightX + boxW / 2, topY + 70, "flags scan → exclusive block offsets → scatter", { size: 20, color: COLORS.teal, weight: 700, anchor: "middle" });
+
+  text(rightX + 30, topY + 115, "• 3 passes: local scan → block sums → parallel scatter", { size: 21 });
+  text(rightX + 30, topY + 150, "• ZERO atomics: every thread computes its own index", { size: 21, color: COLORS.teal, weight: 700 });
+  text(rightX + 30, topY + 185, "• 100% collision-free parallel writes to global memory", { size: 21 });
+  text(rightX + 30, topY + 220, "• STABLE: original relative order is strictly preserved ✓", { size: 21, color: COLORS.purple, weight: 700 });
+  text(rightX + 30, topY + 270, "→ 0.180 ms  (2.54× faster)", { size: 25, color: COLORS.teal, weight: 700 });
+  text(rightX + 30, topY + 305, "doing 3 passes beats 1 contended atomic pass by a mile", { size: 19, color: COLORS.muted });
+
+
+  // =======================================================================
+  // BOTTOM SECTION: Measured Benchmark Table (Tesla T4)
+  // =======================================================================
+  const tableY = 575;
+  line(leftX, tableY, 1480, tableY, { stroke: COLORS.muted, strokeWidth: 1 });
+
+  text(leftX, tableY + 30, "measured on Tesla T4 (N = 1M floats / 4 MB, 1024 blocks × 1024 threads, 7 interleaved rounds, median):",
+       { size: 21, color: COLORS.muted });
+
+  const cols = [leftX, leftX + 340, leftX + 640, leftX + 900, leftX + 1160];
+  const rowH = 40;
+
+  // table headers
+  text(cols[0], tableY + 72, "kernel", { size: 21, color: COLORS.muted });
+  text(cols[1], tableY + 72, "description", { size: 21, color: COLORS.muted });
+  text(cols[2], tableY + 72, "median time", { size: 21, color: COLORS.muted });
+  text(cols[3], tableY + 72, "spread", { size: 21, color: COLORS.muted });
+  text(cols[4], tableY + 72, "speedup", { size: 21, color: COLORS.muted });
+
+  const rows = [
+    ["hierarchical_scan", "3-pass full array scan", "0.156 ms", "0.156 – 0.156 ms", "scans 1M in 156 µs"],
+    ["compact_atomic",    "atomicAdd counter",      "0.455 ms", "0.455 – 0.456 ms", "baseline (contention)"],
+    ["compact_scan",      "scan-based scatter",     "0.180 ms", "0.179 – 0.180 ms", "2.54× faster (stable)"],
+  ];
+
+  for (let r = 0; r < rows.length; r++) {
+    const y = tableY + 114 + r * rowH;
+    const isBase = r === 1;
+    const isTop  = r === 2;
+    const color  = isBase ? COLORS.coral : (isTop ? COLORS.teal : COLORS.purple);
+
+    text(cols[0], y, rows[r][0], { size: 22, color: INK });
+    text(cols[1], y, rows[r][1], { size: 21, color: COLORS.muted });
+    text(cols[2], y, rows[r][2], { size: 22, color: color, weight: isBase ? 400 : 700 });
+    text(cols[3], y, rows[r][3], { size: 20, color: COLORS.muted });
+    text(cols[4], y, rows[r][4], { size: 22, color: color, weight: isBase ? 400 : 700 });
+  }
+
+  const takeawayEl = text(leftX, tableY + 265, "takeaway: 3 coordinate passes beat 1 contended atomic pass — zero atomics, 2.54× faster, stable order",
+                          { size: 23, color: COLORS.coral, weight: 700 });
+  underline(takeawayEl, COLORS.coral);
+});
+</script>
+</body>
+</html>

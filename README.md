@@ -15,5 +15,7 @@ Writing GPU code every day and posting what I learn, with a hand-drawn diagram f
 | [09](day09) | parallel reduction: shared-memory tree, sequential addressing, two-pass | [reduction.cu](day09/reduction.cu) |
 | [10](day10) | warp shuffles: __shfl_down_sync, warp-level reduction vs shared memory | [warp_shuffle.cu](day10/warp_shuffle.cu) |
 | [11](day11) | atomics + histogram (global contention vs shared privatization) | [histogram.cu](day11/histogram.cu) |
+| [12](day12) | parallel scan (Kogge-Stone vs Blelloch, work-efficiency vs barriers) | [scan.cu](day12/scan.cu) |
+| [13](day13) | large-array scan & stream compaction (3-pass hierarchical scan, zero atomics) | [scan_large.cu](day13/scan_large.cu) |
 
 Each day's folder has its own README with notes and diagrams.

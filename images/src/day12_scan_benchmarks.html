@@ -1,0 +1,106 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+  <style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("scan benchmarks", "day 12 · kogge-stone vs blelloch on 16M floats (Tesla T4)");
+
+  // =======================================================================
+  // TOP SECTION: The 3 Architectural Trade-Offs
+  // =======================================================================
+
+  // --- Box 1: Kogge Single Buffer ---
+  const leftX = 80, boxW = 440, topY = 200, boxH = 340;
+  box(leftX, topY, boxW, boxH, { fill: COLORS.muted, strokeWidth: 2 });
+  text(leftX + boxW / 2, topY + 40, "Kogge-Stone (single buffer)", { size: 26, weight: 700, anchor: "middle" });
+  text(leftX + boxW / 2, topY + 70, "4 KB shared · 1024 threads", { size: 20, color: COLORS.muted, anchor: "middle" });
+
+  text(leftX + 25, topY + 115, "• 10 steps × 2 barriers = 20 __syncthreads()", { size: 21 });
+  text(leftX + 25, topY + 150, "• barrier 1: read into register", { size: 19, color: COLORS.muted });
+  text(leftX + 25, topY + 180, "• barrier 2: write back to shared memory", { size: 19, color: COLORS.muted });
+  text(leftX + 25, topY + 220, "• Work: O(N log N) additions (10,240 ops)", { size: 21 });
+  text(leftX + 25, topY + 265, "→ 1.888 ms  (slowest)", { size: 24, color: COLORS.muted, weight: 700 });
+  text(leftX + 25, topY + 295, "barrier latency adds up quickly", { size: 19, color: COLORS.muted });
+
+
+  // --- Box 2: Kogge Double Buffer ---
+  const midX = 560;
+  box(midX, topY, boxW, boxH, { fill: COLORS.purple, strokeWidth: 2 });
+  text(midX + boxW / 2, topY + 40, "Kogge-Stone (double buffer)", { size: 26, weight: 700, anchor: "middle" });
+  text(midX + boxW / 2, topY + 70, "8 KB shared · 1024 threads", { size: 20, color: COLORS.purple, weight: 700, anchor: "middle" });
+
+  text(midX + 25, topY + 115, "• ping-pong buffers: sdata[2][1024]", { size: 21 });
+  text(midX + 25, topY + 150, "• only 1 barrier per step = 10 barriers!", { size: 21, color: COLORS.teal, weight: 700 });
+  text(midX + 25, topY + 185, "• cuts sync stalls directly in half", { size: 20, color: COLORS.muted });
+  text(midX + 25, topY + 220, "• Work: O(N log N) additions (10,240 ops)", { size: 21 });
+  text(midX + 25, topY + 265, "→ 1.576 ms  (1.20× faster than single)", { size: 24, color: COLORS.teal, weight: 700 });
+  text(midX + 25, topY + 295, "double buffering pays off cleanly", { size: 19, color: COLORS.muted });
+
+
+  // --- Box 3: Blelloch Work-Efficient Tree ---
+  const rightX = 1040;
+  box(rightX, topY, boxW, boxH, { fill: COLORS.teal, strokeWidth: 2 });
+  text(rightX + boxW / 2, topY + 40, "Blelloch Tree (Work-Efficient)", { size: 26, weight: 700, anchor: "middle" });
+  text(rightX + boxW / 2, topY + 70, "4 KB shared · 512 threads", { size: 20, color: COLORS.teal, weight: 700, anchor: "middle" });
+
+  text(rightX + 25, topY + 115, "• Up-sweep + Down-sweep tree (20 barriers)", { size: 21 });
+  text(rightX + 25, topY + 150, "• Work: O(N) ops (only ~2,046 additions)", { size: 21, color: COLORS.coral, weight: 700 });
+  text(rightX + 45, topY + 180, "(5× fewer arithmetic ops than Kogge!)", { size: 19, color: COLORS.muted });
+  text(rightX + 25, topY + 220, "• 512 threads/block → higher SM occupancy", { size: 21 });
+  text(rightX + 25, topY + 265, "→ 1.500 ms  (FASTEST)", { size: 24, color: COLORS.coral, weight: 700 });
+  text(rightX + 25, topY + 295, "5× less math edges out the divergence cost", { size: 19, color: COLORS.coral });
+
+
+  // =======================================================================
+  // BOTTOM SECTION: Measured Benchmark Table (Tesla T4)
+  // =======================================================================
+  const tableY = 575;
+  line(leftX, tableY, 1480, tableY, { stroke: COLORS.muted, strokeWidth: 1 });
+
+  text(leftX, tableY + 30, "measured on Tesla T4 (N = 16M floats / 64 MB, 16,384 blocks, 7 interleaved rounds, median):",
+       { size: 21, color: COLORS.muted });
+
+  const cols = [leftX, leftX + 380, leftX + 660, leftX + 940, leftX + 1180];
+  const rowH = 40;
+
+  // table headers
+  text(cols[0], tableY + 72, "kernel", { size: 21, color: COLORS.muted });
+  text(cols[1], tableY + 72, "barriers", { size: 21, color: COLORS.muted });
+  text(cols[2], tableY + 72, "median time", { size: 21, color: COLORS.muted });
+  text(cols[3], tableY + 72, "spread", { size: 21, color: COLORS.muted });
+  text(cols[4], tableY + 72, "speedup", { size: 21, color: COLORS.muted });
+
+  const rows = [
+    ["kogge_single_buf", "20 barriers", "1.888 ms", "1.887 – 1.890 ms", "baseline (slowest)"],
+    ["kogge_double_buf", "10 barriers", "1.576 ms", "1.574 – 1.577 ms", "1.20× faster"],
+    ["blelloch_tree",    "20 barriers", "1.500 ms", "1.497 – 1.502 ms", "1.26× faster (fastest)"],
+  ];
+
+  for (let r = 0; r < rows.length; r++) {
+    const y = tableY + 114 + r * rowH;
+    const isBase = r === 0;
+    const isTop  = r === 2;
+    const color  = isBase ? COLORS.muted : (isTop ? COLORS.coral : COLORS.teal);
+
+    text(cols[0], y, rows[r][0], { size: 22, color: INK });
+    text(cols[1], y, rows[r][1], { size: 21, color: COLORS.muted });
+    text(cols[2], y, rows[r][2], { size: 22, color: color, weight: isBase ? 400 : 700 });
+    text(cols[3], y, rows[r][3], { size: 20, color: COLORS.muted });
+    text(cols[4], y, rows[r][4], { size: 22, color: color, weight: isBase ? 400 : 700 });
+  }
+
+  const takeawayEl = text(leftX, tableY + 265, "takeaway: cutting barriers gave 1.20×, but cutting arithmetic by 5× made Blelloch the overall winner",
+                          { size: 23, color: COLORS.coral, weight: 700 });
+  underline(takeawayEl, COLORS.coral);
+});
+</script>
+</body>
+</html>
