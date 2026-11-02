@@ -1,0 +1,96 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+  <style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("SpMV benchmarks", "day 15 · scalar vs vector warp across uniform & skewed matrices (Tesla T4)");
+
+  // =======================================================================
+  // TOP SECTION: The Two Scenarios
+  // =======================================================================
+
+  // --- Left Box: Uniform Rows ---
+  const leftX = 80, boxW = 690, topY = 200, boxH = 340;
+  box(leftX, topY, boxW, boxH, { fill: COLORS.teal, strokeWidth: 2 });
+  text(leftX + boxW / 2, topY + 40, "Scenario 1: Uniform Rows (32 nnz / row)", { size: 28, weight: 700, anchor: "middle" });
+  text(leftX + boxW / 2, topY + 70, "vector SpMV wins by 3.18× (coalescing triumph)", { size: 20, color: COLORS.teal, weight: 700, anchor: "middle" });
+
+  text(leftX + 30, topY + 115, "• scalar_uniform: 1.035 ms  (baseline)", { size: 22, color: COLORS.coral });
+  text(leftX + 50, topY + 145, "32 threads in warp access 32 different rows → uncoalesced scatter", { size: 19, color: COLORS.muted });
+
+  text(leftX + 30, topY + 185, "• vector_uniform: 0.326 ms  (3.18× faster!)", { size: 24, color: COLORS.teal, weight: 700 });
+  text(leftX + 50, topY + 215, "all 32 lanes load contiguous memory in ONE 128-byte coalesced burst", { size: 19, color: INK });
+  text(leftX + 50, topY + 242, "warp reduction via __shfl_down_sync takes only 5 cycles", { size: 19, color: COLORS.muted });
+
+  text(leftX + 30, topY + 295, "verdict: when row length matches warp size (32), vector SpMV dominates", { size: 21, weight: 700 });
+
+
+  // --- Right Box: Skewed Power-Law Rows ---
+  const rightX = 830;
+  box(rightX, topY, boxW, boxH, { fill: COLORS.purple, strokeWidth: 2 });
+  text(rightX + boxW / 2, topY + 40, "Scenario 2: Skewed Rows (90% @ 8 nnz, 10% @ 248 nnz)", { size: 28, weight: 700, anchor: "middle" });
+  text(rightX + boxW / 2, topY + 70, "the surprise: scalar edges out vector (0.443 vs 0.500 ms)", { size: 20, color: COLORS.coral, weight: 700, anchor: "middle" });
+
+  text(leftX + 30 + 750, topY + 115, "• vector_skewed: 0.500 ms  (underutilization trap!)", { size: 22, color: COLORS.coral });
+  text(leftX + 50 + 750, topY + 145, "on 90% of rows (length 8), 24 of 32 lanes (75%) sit idle!", { size: 19, color: COLORS.coral });
+  text(leftX + 50 + 750, topY + 172, "wastes 75% compute + pays full shuffle overhead on tiny rows", { size: 19, color: COLORS.muted });
+
+  text(leftX + 30 + 750, topY + 215, "• scalar_skewed: 0.443 ms  (1.14× faster)", { size: 22, color: COLORS.teal, weight: 700 });
+  text(leftX + 50 + 750, topY + 245, "only 65k threads launched; short rows finish in 8 quick iterations", { size: 19, color: INK });
+
+  text(leftX + 30 + 750, topY + 295, "verdict: on ultra-short rows (<= 8), vector wastes 75% of warp threads", { size: 21, weight: 700 });
+
+
+  // =======================================================================
+  // BOTTOM SECTION: Measured Benchmark Table (Tesla T4)
+  // =======================================================================
+  const tableY = 575;
+  line(leftX, tableY, 1480, tableY, { stroke: COLORS.muted, strokeWidth: 1 });
+
+  text(leftX, tableY + 30, "measured on Tesla T4 (65,536 x 65,536 matrix, ~2.1M non-zeros, 7 interleaved rounds, median):",
+       { size: 21, color: COLORS.muted });
+
+  const cols = [leftX, leftX + 280, leftX + 580, leftX + 880, leftX + 1160];
+  const rowH = 38;
+
+  // table headers
+  text(cols[0], tableY + 68, "kernel", { size: 21, color: COLORS.muted });
+  text(cols[1], tableY + 68, "workload", { size: 21, color: COLORS.muted });
+  text(cols[2], tableY + 68, "median time", { size: 21, color: COLORS.muted });
+  text(cols[3], tableY + 68, "spread", { size: 21, color: COLORS.muted });
+  text(cols[4], tableY + 68, "speedup", { size: 21, color: COLORS.muted });
+
+  const rows = [
+    ["scalar_uniform", "uniform (32 nnz/row)", "1.035 ms", "1.029 – 1.045 ms", "baseline (uncoalesced)"],
+    ["vector_uniform", "uniform (32 nnz/row)", "0.326 ms", "0.322 – 0.331 ms", "3.18× faster (coalesced)"],
+    ["scalar_skewed",  "skewed (8 vs 248 nnz)", "0.443 ms", "0.435 – 0.452 ms", "1.14× faster than vector"],
+    ["vector_skewed",  "skewed (8 vs 248 nnz)", "0.500 ms", "0.497 – 0.510 ms", "75% warp underutilized"],
+  ];
+
+  for (let r = 0; r < rows.length; r++) {
+    const y = tableY + 106 + r * rowH;
+    const isTop  = r === 1;
+    const color  = isTop ? COLORS.teal : (r === 0 ? COLORS.coral : INK);
+
+    text(cols[0], y, rows[r][0], { size: 21, color: INK });
+    text(cols[1], y, rows[r][1], { size: 21, color: COLORS.muted });
+    text(cols[2], y, rows[r][2], { size: 21, color: color, weight: isTop ? 700 : 400 });
+    text(cols[3], y, rows[r][3], { size: 20, color: COLORS.muted });
+    text(cols[4], y, rows[r][4], { size: 21, color: color, weight: isTop ? 700 : 400 });
+  }
+
+  const takeawayEl = text(leftX, tableY + 270, "takeaway: Vector SpMV wins 3.18× when rows >= 32; on ultra-short rows (<= 8), warps idle and Scalar edges out",
+                          { size: 22, color: COLORS.coral, weight: 700 });
+  underline(takeawayEl, COLORS.coral);
+});
+</script>
+</body>
+</html>

@@ -18,5 +18,6 @@ Writing GPU code every day and posting what I learn, with a hand-drawn diagram f
 | [12](day12) | parallel scan (Kogge-Stone vs Blelloch, work-efficiency vs barriers) | [scan.cu](day12/scan.cu) |
 | [13](day13) | large-array scan & stream compaction (3-pass hierarchical scan, zero atomics) | [scan_large.cu](day13/scan_large.cu) |
 | [14](day14) | sorting: bitonic sort & sorting networks (55 steps vs 1024 steps) | [bitonic_sort.cu](day14/bitonic_sort.cu) |
+| [15](day15) | sparse matrices: CSR SpMV & load imbalance (scalar vs vector warp) | [spmv.cu](day15/spmv.cu) |
 
 Each day's folder has its own README with notes and diagrams.
