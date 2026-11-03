@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+  <style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("Memory Bandwidth benchmarks", "day 16 · float vs float4 vectorized copy (128 MB on Tesla T4)");
+
+  // =======================================================================
+  // TOP SECTION: The Two Approaches
+  // =======================================================================
+  const leftX = 80, boxW = 690, topY = 200, boxH = 340;
+
+  // --- Left Box: Scalar float ---
+  box(leftX, topY, boxW, boxH, { fill: COLORS.coral, strokeWidth: 2 });
+  text(leftX + boxW / 2, topY + 40, "copyFloat (Scalar 32-bit)", { size: 28, weight: 700, anchor: "middle" });
+  text(leftX + boxW / 2, topY + 70, "131.8 GB/s sustained (41.2% of peak)", { size: 20, color: COLORS.coral, weight: 700, anchor: "middle" });
+
+  text(leftX + 30, topY + 115, "• latency: 2.036 ms  (spread 2.032 – 2.049 ms)", { size: 22, color: COLORS.coral });
+  text(leftX + 50, topY + 145, "each thread issues 1 standard 32-bit LDG.32 instruction", { size: 19, color: COLORS.muted });
+
+  text(leftX + 30, topY + 185, "• bottleneck: instruction issue limit", { size: 22, color: INK, weight: 700 });
+  text(leftX + 50, topY + 215, "even though accesses are 100% coalesced into 128B cache lines,", { size: 19, color: INK });
+  text(leftX + 50, topY + 242, "the GPU issue rate cannot sustain max DRAM throughput on 4B words", { size: 19, color: COLORS.muted });
+
+  text(leftX + 30, topY + 295, "verdict: leaves > 58% of available bus bandwidth unutilized", { size: 21, weight: 700, color: COLORS.coral });
+
+  // --- Right Box: Vectorized float4 ---
+  const rightX = 830;
+  box(rightX, topY, boxW, boxH, { fill: COLORS.teal, strokeWidth: 2 });
+  text(rightX + boxW / 2, topY + 40, "copyFloat4 (Vectorized 128-bit)", { size: 28, weight: 700, anchor: "middle" });
+  text(rightX + boxW / 2, topY + 70, "245.9 GB/s sustained (76.8% of peak) — 1.87× faster!", { size: 20, color: COLORS.teal, weight: 700, anchor: "middle" });
+
+  text(rightX + 30, topY + 115, "• latency: 1.092 ms  (spread 1.086 – 1.112 ms)", { size: 22, color: COLORS.teal, weight: 700 });
+  text(rightX + 50, topY + 145, "each thread issues one 128-bit LDG.128 instruction", { size: 19, color: COLORS.muted });
+
+  text(rightX + 30, topY + 185, "• efficiency: 4× fewer memory instructions", { size: 22, color: INK, weight: 700 });
+  text(rightX + 50, topY + 215, "one warp moves 512 bytes (4 cache lines) per instruction", { size: 19, color: INK });
+  text(rightX + 50, topY + 242, "const __restrict__ hints compiler to maximize load pipeline fill", { size: 19, color: COLORS.muted });
+
+  text(rightX + 30, topY + 295, "verdict: hits 76.8% of theoretical 320 GB/s roofline limit", { size: 21, weight: 700, color: "#1a6e3a" });
+
+  // =======================================================================
+  // BOTTOM SECTION: Measured Benchmark Table (Tesla T4)
+  // =======================================================================
+  const tableY = 575;
+  line(leftX, tableY, 1480, tableY, { stroke: COLORS.muted, strokeWidth: 1 });
+
+  text(leftX, tableY + 30, "measured on Tesla T4 (N = 33,554,432 floats / 128 MB, 256 MB traffic, 7 rounds, median):",
+       { size: 21, color: COLORS.muted });
+
+  const cols = [leftX, leftX + 260, leftX + 540, leftX + 830, leftX + 1040, leftX + 1250];
+  const rowH = 42;
+
+  // table headers
+  text(cols[0], tableY + 68, "kernel", { size: 21, color: COLORS.muted });
+  text(cols[1], tableY + 68, "load width", { size: 21, color: COLORS.muted });
+  text(cols[2], tableY + 68, "median time", { size: 21, color: COLORS.muted });
+  text(cols[3], tableY + 68, "bandwidth", { size: 21, color: COLORS.muted });
+  text(cols[4], tableY + 68, "% peak (320 GB/s)", { size: 21, color: COLORS.muted });
+  text(cols[5], tableY + 68, "speedup", { size: 21, color: COLORS.muted });
+
+  const rows = [
+    ["copyFloat",  "32-bit (float)",    "2.036 ms", "131.8 GB/s", "41.2%", "baseline"],
+    ["copyFloat4", "128-bit (float4)",  "1.092 ms", "245.9 GB/s", "76.8%", "1.87× faster"],
+  ];
+
+  for (let r = 0; r < rows.length; r++) {
+    const y = tableY + 112 + r * rowH;
+    const isTop = r === 1;
+    const color = isTop ? COLORS.teal : COLORS.coral;
+
+    text(cols[0], y, rows[r][0], { size: 21, color: INK, weight: isTop ? 700 : 400 });
+    text(cols[1], y, rows[r][1], { size: 21, color: COLORS.muted });
+    text(cols[2], y, rows[r][2], { size: 21, color: color, weight: isTop ? 700 : 400 });
+    text(cols[3], y, rows[r][3], { size: 21, color: color, weight: 700 });
+    text(cols[4], y, rows[r][4], { size: 21, color: color, weight: isTop ? 700 : 400 });
+    text(cols[5], y, rows[r][5], { size: 21, color: color, weight: isTop ? 700 : 400 });
+  }
+
+  const takeawayEl = text(leftX, tableY + 230, "takeaway: Memory bound kernels need float4 to saturate the memory bus; scalar loads bottleneck on instruction issue rate.",
+                          { size: 22, color: COLORS.coral, weight: 700 });
+  underline(takeawayEl, COLORS.coral);
+});
+</script>
+</body>
+</html>

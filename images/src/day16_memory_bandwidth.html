@@ -1,0 +1,118 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+  <style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("Memory Bandwidth: float vs float4",
+        "day 16 · vectorized loads, __restrict__, roofline basics");
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // TOP SECTION: what a DRAM transaction looks like for each kernel
+  // ─────────────────────────────────────────────────────────────────────────
+  const sX = 80, sY = 175, sW = 1440, sH = 240;
+  box(sX, sY, sW, sH, { fill: COLORS.yellow, strokeWidth: 2 });
+  text(sX + 25, sY + 34, "One Warp (32 threads) Accessing Memory", { size: 26, weight: 700 });
+  text(sX + 25, sY + 60, "GPU memory bus width = 128 bits. One memory instruction per warp. The difference is how many bytes each instruction moves.", { size: 17, color: COLORS.muted });
+
+  // ── float row ──
+  const rowFloatY = sY + 88;
+  text(sX + 25, rowFloatY + 20, "float:", { size: 20, weight: 700, color: COLORS.coral });
+  text(sX + 105, rowFloatY + 20, "32 threads × 4 B = 128 B per warp instruction  (1 cache line)", { size: 18, color: "#555" });
+  const cW = 38, cH = 32, cGap = 2;
+  for (let i = 0; i < 32; i++) {
+    box(sX + 28 + i * (cW + cGap), rowFloatY + 32, cW, cH, { fill: COLORS.coral, label: String(i), size: 11 });
+  }
+
+  // ── float4 row ──
+  const rowF4Y = rowFloatY + 80;
+  text(sX + 25, rowF4Y + 20, "float4:", { size: 20, weight: 700, color: COLORS.teal });
+  text(sX + 115, rowF4Y + 20, "32 threads × 16 B = 512 B per warp instruction  (4 cache lines — 4× the data moved per instruction)", { size: 18, color: "#555" });
+  for (let i = 0; i < 32; i++) {
+    // each cell represents a float4 (16B), so 4 sub-divisions shown as teal block
+    box(sX + 28 + i * (cW + cGap), rowF4Y + 32, cW, cH, { fill: COLORS.teal, label: "×4", size: 11 });
+  }
+
+  // annotation arrow between rows
+  arrow(sX + sW - 220, rowFloatY + 48, sX + sW - 220, rowF4Y + 48, { color: "#555" });
+  text(sX + sW - 210, (rowFloatY + rowF4Y) / 2 + 60, "same 32 threads,", { size: 16, color: "#555" });
+  text(sX + sW - 210, (rowFloatY + rowF4Y) / 2 + 80, "4× more data/instruction", { size: 16, color: COLORS.teal, weight: 700 });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // BOTTOM LEFT: float kernel
+  // ─────────────────────────────────────────────────────────────────────────
+  const lX = 80, lY = 440, lW = 680, lH = 420;
+  box(lX, lY, lW, lH, { fill: COLORS.coral, strokeWidth: 2 });
+  text(lX + lW / 2, lY + 36, "float  (scalar)", { size: 28, weight: 700, anchor: "middle" });
+  text(lX + lW / 2, lY + 62, "1 thread  →  1 float  →  4 bytes per instruction", { size: 18, color: COLORS.muted, anchor: "middle" });
+
+  // code
+  const lcY = lY + 90;
+  text(lX + 30, lcY,      "__global__ void copyFloat(", { size: 15, color: "#333", font: "mono" });
+  text(lX + 30, lcY + 22, "    const float* __restrict__ src,", { size: 15, color: "#333", font: "mono" });
+  text(lX + 30, lcY + 44, "    float* __restrict__ dst, int n) {", { size: 15, color: "#333", font: "mono" });
+  text(lX + 30, lcY + 66, "    int i = blockIdx.x * blockDim.x + threadIdx.x;", { size: 15, color: "#333", font: "mono" });
+  text(lX + 30, lcY + 88, "    if (i < n) dst[i] = src[i];", { size: 15, color: COLORS.coral, font: "mono" });
+  text(lX + 30, lcY + 110, "}", { size: 15, color: "#333", font: "mono" });
+
+  // key facts
+  const lkY = lcY + 148;
+  text(lX + 30, lkY,      "▸  1 LDG.32 instruction = 4 bytes/thread", { size: 17, color: "#444" });
+  text(lX + 30, lkY + 26, "▸  128B fetched from DRAM per warp dispatch", { size: 17, color: "#444" });
+  text(lX + 30, lkY + 52, "▸  fully coalesced  →  no wasted cache line bytes", { size: 17, color: "#444" });
+  text(lX + 30, lkY + 78, "▸  BUT: needs more warp dispatches to drain 128 MB", { size: 17, color: COLORS.coral, weight: 700 });
+
+  // BW bar
+  const lbY = lkY + 116;
+  box(lX + 30, lbY, 600, 24, { fill: "#ddd" });
+  box(lX + 30, lbY, 600 * 0.5, 24, { fill: COLORS.coral });
+  text(lX + 30, lbY + 40, "achieves ~50% of peak  (limited by instruction count)", { size: 16, color: COLORS.coral });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // BOTTOM RIGHT: float4 kernel
+  // ─────────────────────────────────────────────────────────────────────────
+  const rX = 840, rY = 440, rW = 680, rH = 420;
+  box(rX, rY, rW, rH, { fill: COLORS.teal, strokeWidth: 2 });
+  text(rX + rW / 2, rY + 36, "float4  (vectorized)", { size: 28, weight: 700, anchor: "middle" });
+  text(rX + rW / 2, rY + 62, "1 thread  →  4 floats  →  16 bytes per instruction", { size: 18, color: COLORS.muted, anchor: "middle" });
+
+  // code
+  const rcY = rY + 90;
+  text(rX + 30, rcY,      "__global__ void copyFloat4(", { size: 15, color: "#333", font: "mono" });
+  text(rX + 30, rcY + 22, "    const float4* __restrict__ src,", { size: 15, color: "#333", font: "mono" });
+  text(rX + 30, rcY + 44, "    float4* __restrict__ dst, int n4) {", { size: 15, color: "#333", font: "mono" });
+  text(rX + 30, rcY + 66, "    int i = blockIdx.x * blockDim.x + threadIdx.x;", { size: 15, color: "#333", font: "mono" });
+  text(rX + 30, rcY + 88, "    if (i < n4) dst[i] = src[i];", { size: 15, color: COLORS.teal, font: "mono" });
+  text(rX + 30, rcY + 110, "}", { size: 15, color: "#333", font: "mono" });
+
+  // key facts
+  const rkY = rcY + 148;
+  text(rX + 30, rkY,      "▸  1 LDG.128 instruction = 16 bytes/thread", { size: 17, color: "#444" });
+  text(rX + 30, rkY + 26, "▸  512B fetched per warp dispatch  (4 cache lines)", { size: 17, color: "#444" });
+  text(rX + 30, rkY + 52, "▸  __restrict__ → no aliasing → compiler fuses loads", { size: 17, color: "#1a5e3a" });
+  text(rX + 30, rkY + 78, "▸  4× fewer instructions  →  higher sustained BW", { size: 17, color: COLORS.teal, weight: 700 });
+
+  // BW bar
+  const rbY = rkY + 116;
+  box(rX + 30, rbY, 600, 24, { fill: "#ddd" });
+  box(rX + 30, rbY, 600 * 0.88, 24, { fill: COLORS.teal });
+  text(rX + 30, rbY + 40, "achieves ~88% of peak  (T4 peak ≈ 320 GB/s)", { size: 16, color: "#1a5e3a" });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // ROOFLINE note — placed bottom centre between the two panels
+  // ─────────────────────────────────────────────────────────────────────────
+  const rrX = 760, rrY = 700, rrW = 80;
+  // vertical divider between panels with label
+  line(rrX, 440, rrX, 860, { color: "#bbb", strokeWidth: 1 });
+  text(rrX, 874, "arithmetic intensity ≈ 0 → always BW-bound → roofline ceiling = T4 peak ~320 GB/s", { size: 15, color: "#888", anchor: "middle" });
+});
+</script>
+</body>
+</html>
