@@ -20,5 +20,6 @@ Writing GPU code every day and posting what I learn, with a hand-drawn diagram f
 | [14](day14) | sorting: bitonic sort & sorting networks (55 steps vs 1024 steps) | [bitonic_sort.cu](day14/bitonic_sort.cu) |
 | [15](day15) | sparse matrices: CSR SpMV & load imbalance (scalar vs vector warp) | [spmv.cu](day15/spmv.cu) |
 | [16](day16) | memory bandwidth: float vs float4, __restrict__, roofline basics (1.87x faster) | [memory_bandwidth.cu](day16/memory_bandwidth.cu) |
+| [17](day17) | matmul II: thread coarsening & 2D register tiling (2.47x faster, 600 GFLOPS) | [matmul_tiled.cu](day17/matmul_tiled.cu) |
 
 Each day's folder has its own README with notes and diagrams.

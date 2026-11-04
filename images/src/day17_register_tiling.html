@@ -1,0 +1,146 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+  <style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("MatMul II: Register Tiling & Thread Coarsening",
+        "day 17 · moving from shared memory reuse to register file reuse (outer product in registers)");
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // TOP SECTION: Memory Hierarchy & The 2-Level Tiling Principle
+  // ─────────────────────────────────────────────────────────────────────────
+  const topX = 80, topY = 175, topW = 1440, topH = 170;
+  box(topX, topY, topW, topH, { fill: COLORS.yellow, strokeWidth: 2 });
+  text(topX + 25, topY + 34, "The Two-Level Tiling Principle in High-Performance GEMM", { size: 26, weight: 700 });
+  text(topX + 25, topY + 60, "Global memory is too slow (~320 GB/s) → we tiled into Shared Memory. But Shared Memory (~1.2 TB/s) is also too slow!", { size: 18, color: COLORS.muted });
+
+  // 3-tier pipeline cards
+  const hW = 420, hH = 65, hY = topY + 85;
+  box(topX + 25, hY, hW, hH, { fill: COLORS.coral });
+  text(topX + 40, hY + 26, "1. Global Memory (DRAM)", { size: 19, weight: 700, color: COLORS.coral });
+  text(topX + 40, hY + 48, "~320 GB/s · High latency · Tile into Shared Mem", { size: 16, color: "#555" });
+
+  arrow(topX + 25 + hW + 8, hY + hH/2, topX + 25 + hW + 52, hY + hH/2, { color: "#666" });
+
+  box(topX + 25 + hW + 60, hY, hW, hH, { fill: COLORS.purple });
+  text(topX + 25 + hW + 75, hY + 26, "2. Shared Memory (SRAM)", { size: 19, weight: 700, color: COLORS.purple });
+  text(topX + 25 + hW + 75, hY + 48, "~1.2 TB/s · Bank conflicts · Tile into Registers", { size: 16, color: "#555" });
+
+  arrow(topX + 25 + 2*hW + 68, hY + hH/2, topX + 25 + 2*hW + 112, hY + hH/2, { color: "#666" });
+
+  box(topX + 25 + 2*hW + 120, hY, hW - 60, hH, { fill: COLORS.teal });
+  text(topX + 25 + 2*hW + 135, hY + 26, "3. Register File", { size: 19, weight: 700, color: COLORS.teal });
+  text(topX + 25 + 2*hW + 135, hY + 48, "~10+ TB/s · 0-cycle latency · FMAs happen here!", { size: 16, color: "#1a5e3a" });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // BOTTOM LEFT: 1D Register Tiling (Thread Coarsening)
+  // ─────────────────────────────────────────────────────────────────────────
+  const lX = 80, lY = 370, lW = 690, lH = 490;
+  box(lX, lY, lW, lH, { fill: COLORS.coral, strokeWidth: 2 });
+  text(lX + lW / 2, lY + 36, "1D Register Tiling (1 Thread = 1×4 Outputs)", { size: 26, weight: 700, anchor: "middle" });
+  text(lX + lW / 2, lY + 62, "coarsening along the row: broadcast 1 value of A across 4 values of B", { size: 17, color: COLORS.muted, anchor: "middle" });
+
+  // visual of As element broadcast across 4 Bs elements
+  const vY = lY + 95;
+  box(lX + 50, vY + 20, 50, 40, { fill: COLORS.purple, label: "a", size: 19 });
+  text(lX + 75, vY + 80, "As[ty][k]", { size: 15, color: COLORS.purple, anchor: "middle" });
+  text(lX + 75, vY + 100, "(1 shared read)", { size: 14, color: COLORS.muted, anchor: "middle" });
+
+  text(lX + 135, vY + 44, "×", { size: 28, weight: 700, color: "#777" });
+
+  // 4 elements of B
+  for (let j = 0; j < 4; j++) {
+    box(lX + 175 + j * 54, vY + 20, 48, 40, { fill: COLORS.teal, label: `b${j}`, size: 16 });
+    text(lX + 199 + j * 54, vY + 80, `Bs[k][c+${j}]`, { size: 13, color: COLORS.teal, anchor: "middle" });
+  }
+  text(lX + 280, vY + 100, "(4 shared reads)", { size: 14, color: COLORS.muted, anchor: "middle" });
+
+  text(lX + 415, vY + 44, "=", { size: 28, weight: 700, color: "#777" });
+
+  // 4 outputs in registers
+  for (let j = 0; j < 4; j++) {
+    box(lX + 455 + j * 50, vY + 20, 44, 40, { fill: COLORS.coral, label: `c${j}`, size: 15 });
+  }
+  text(lX + 550, vY + 80, "c_reg[0..3] (in registers)", { size: 15, color: COLORS.coral, anchor: "middle" });
+  text(lX + 550, vY + 100, "(4 FMAs updated in parallel)", { size: 14, color: COLORS.muted, anchor: "middle" });
+
+  // summary stats
+  const lsY = lY + 280;
+  line(lX + 30, lsY, lX + lW - 30, lsY, { stroke: "#ddd", strokeWidth: 1 });
+
+  text(lX + 35, lsY + 30, "Arithmetic reuse math:", { size: 19, weight: 700 });
+  text(lX + 35, lsY + 58, "• Baseline 1×1: 2 shared reads (1 from As, 1 from Bs) → 1 FMA", { size: 17, color: "#555" });
+  text(lX + 55, lsY + 80, "Ratio = 2.0 shared reads / FMA", { size: 16, color: COLORS.coral, weight: 700 });
+
+  text(lX + 35, lsY + 112, "• 1D Coarsened 1×4: 1 read from As + 4 reads from Bs = 5 reads → 4 FMAs", { size: 17, color: "#555" });
+  text(lX + 55, lsY + 134, "Ratio = 5 / 4 = 1.25 shared reads / FMA (37.5% traffic reduction!)", { size: 16, color: COLORS.teal, weight: 700 });
+
+  text(lX + 35, lsY + 172, "• Register reuse: value 'a' sits in register, reused 4 times", { size: 17, color: "#333" });
+  text(lX + 35, lsY + 196, "• Thread count: 4× fewer threads per block → lower scheduler overhead", { size: 17, color: "#333" });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // BOTTOM RIGHT: 2D Register Tiling (Outer Product)
+  // ─────────────────────────────────────────────────────────────────────────
+  const rX = 830, rY = 370, rW = 690, rH = 490;
+  box(rX, rY, rW, rH, { fill: COLORS.teal, strokeWidth: 2 });
+  text(rX + rW / 2, rY + 36, "2D Register Tiling (1 Thread = 4×4 = 16 Outputs)", { size: 26, weight: 700, anchor: "middle" });
+  text(rX + rW / 2, rY + 60, "rank-1 outer product in registers: a_frag[4] ⊗ b_frag[4] → c_reg[4][4]", { size: 17, color: COLORS.muted, anchor: "middle" });
+
+  // 2D Outer product visual
+  const oY = rY + 120;
+
+  // vector a (column of 4)
+  for (let i = 0; i < 4; i++) {
+    box(rX + 60, oY + i * 26, 44, 22, { fill: COLORS.purple, label: `a${i}`, size: 12 });
+  }
+  text(rX + 82, oY + 122, "a_frag[4]", { size: 13, color: COLORS.purple, anchor: "middle" });
+  text(rX + 82, oY + 138, "(4 reads)", { size: 12, color: COLORS.muted, anchor: "middle" });
+
+  text(rX + 130, oY + 50, "⊗", { size: 28, weight: 700, color: "#777" });
+
+  // vector b (row of 4)
+  for (let j = 0; j < 4; j++) {
+    box(rX + 165 + j * 34, oY - 26, 30, 22, { fill: COLORS.teal, label: `b${j}`, size: 12 });
+  }
+  text(rX + 230, oY - 38, "b_frag[4] (4 reads)", { size: 13, color: COLORS.teal, anchor: "middle" });
+
+  // 4x4 output grid
+  for (let i = 0; i < 4; i++) {
+    for (let j = 0; j < 4; j++) {
+      box(rX + 165 + j * 34, oY + i * 26, 30, 22, { fill: COLORS.coral, label: `c`, size: 11 });
+    }
+  }
+  text(rX + 230, oY + 122, "c_reg[4][4]", { size: 14, color: COLORS.coral, weight: 700, anchor: "middle" });
+  text(rX + 230, oY + 138, "(16 FMAs updated!)", { size: 13, color: COLORS.coral, anchor: "middle" });
+
+  // Right annotation arrow
+  arrow(rX + 325, oY + 50, rX + 365, oY + 50, { color: "#666" });
+  text(rX + 380, oY + 38, "Outer Product:", { size: 17, weight: 700, color: INK });
+  text(rX + 380, oY + 62, "4 reads + 4 reads = 8 reads", { size: 16, color: "#444" });
+  text(rX + 380, oY + 84, "→ 16 FMAs computed!", { size: 16, color: COLORS.teal, weight: 700 });
+
+  // summary stats
+  const rsY = rY + 280;
+  line(rX + 30, rsY, rX + rW - 30, rsY, { stroke: "#ddd", strokeWidth: 1 });
+
+  text(rX + 35, rsY + 30, "Why 2D Register Tiling Dominates:", { size: 19, weight: 700 });
+  text(rX + 35, rsY + 58, "• 8 shared memory reads produce 16 multiply-accumulates", { size: 17, color: "#555" });
+  text(rX + 55, rsY + 80, "Ratio = 8 / 16 = 0.5 shared reads / FMA (4× less traffic than baseline!)", { size: 16, color: COLORS.teal, weight: 700 });
+
+  text(rX + 35, rsY + 112, "• Shared Memory bandwidth is no longer the bottleneck", { size: 17, color: "#333" });
+  text(rX + 55, rsY + 134, "Memory traffic shifts into the 10+ TB/s Register File!", { size: 16, color: "#1a5e3a", weight: 700 });
+
+  text(rX + 35, rsY + 172, "• Coalesced cooperative loading of 64×8 As and 8×64 Bs tiles", { size: 17, color: "#333" });
+  text(rX + 35, rsY + 196, "• Foundation of production GEMM: this is how cuBLAS & CUTLASS work", { size: 17, color: COLORS.coral, weight: 700 });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=block" rel="stylesheet">
+  <style>body { margin: 0; background: #fdfaf3; } svg { display: block; }</style>
+</head>
+<body>
+<svg id="canvas" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script src="sketch.js"></script>
+<script>
+fontsReady.then(() => {
+  title("MatMul II benchmarks", "day 17 · shared-memory baseline vs 1D vs 2D register tiling (Tesla T4)");
+
+  // =======================================================================
+  // TOP SECTION: The Three Kernels
+  // =======================================================================
+  const topY = 195, boxH = 345;
+  const colW = 450, gap = 45, startX = 80;
+
+  // --- Box 1: Shared Tiled (1x1) ---
+  const b1X = startX;
+  box(b1X, topY, colW, boxH, { fill: COLORS.coral, strokeWidth: 2 });
+  text(b1X + colW / 2, topY + 38, "shared_tiled (1×1)", { size: 27, weight: 700, anchor: "middle" });
+  text(b1X + colW / 2, topY + 68, "8.841 ms · 242.9 GFLOPS (baseline)", { size: 19, color: COLORS.coral, weight: 700, anchor: "middle" });
+
+  text(b1X + 25, topY + 115, "• thread work: 1 element C[r][c]", { size: 19, color: INK });
+  text(b1X + 25, topY + 145, "• memory traffic per FMA:", { size: 19, weight: 700, color: COLORS.coral });
+  text(b1X + 45, topY + 172, "1 load from As + 1 load from Bs", { size: 18, color: "#555" });
+  text(b1X + 45, topY + 196, "= 2.0 shared reads / FMA", { size: 18, color: COLORS.coral, weight: 700 });
+
+  text(b1X + 25, topY + 236, "• bottleneck: shared memory bandwidth", { size: 19, color: INK });
+  text(b1X + 45, topY + 262, "threads constantly hit SRAM for every single multiply-accumulate", { size: 17, color: COLORS.muted });
+
+  text(b1X + 25, topY + 310, "verdict: limited by SRAM issue rate", { size: 19, weight: 700, color: COLORS.coral });
+
+  // --- Box 2: 1D Coarsened (1x4) ---
+  const b2X = startX + colW + gap;
+  box(b2X, topY, colW, boxH, { fill: COLORS.yellow, strokeWidth: 2 });
+  text(b2X + colW / 2, topY + 38, "coarsened_1d (1×4)", { size: 27, weight: 700, anchor: "middle" });
+  text(b2X + colW / 2, topY + 68, "7.950 ms · 270.1 GFLOPS (1.11× faster)", { size: 19, color: "#9a6a00", weight: 700, anchor: "middle" });
+
+  text(b2X + 25, topY + 115, "• thread work: 4 elements along row", { size: 19, color: INK });
+  text(b2X + 25, topY + 145, "• memory traffic per 4 FMAs:", { size: 19, weight: 700, color: "#9a6a00" });
+  text(b2X + 45, topY + 172, "1 load from As + 4 loads from Bs", { size: 18, color: "#555" });
+  text(b2X + 45, topY + 196, "= 1.25 shared reads / FMA (37.5% drop)", { size: 18, color: "#9a6a00", weight: 700 });
+
+  text(b2X + 25, topY + 236, "• register reuse: 1D broadcast", { size: 19, color: INK });
+  text(b2X + 45, topY + 262, "value 'a' cached in register, reused across 4 column elements", { size: 17, color: COLORS.muted });
+
+  text(b2X + 25, topY + 310, "verdict: modest win; As reused, Bs still 1:1", { size: 19, weight: 700, color: "#9a6a00" });
+
+  // --- Box 3: 2D Register Tiled (4x4) ---
+  const b3X = startX + 2 * (colW + gap);
+  box(b3X, topY, colW, boxH, { fill: COLORS.teal, strokeWidth: 2 });
+  text(b3X + colW / 2, topY + 38, "reg_tiled_2d (4×4)", { size: 27, weight: 700, anchor: "middle" });
+  text(b3X + colW / 2, topY + 68, "3.578 ms · 600.2 GFLOPS — 2.47× faster!", { size: 19, color: COLORS.teal, weight: 700, anchor: "middle" });
+
+  text(b3X + 25, topY + 115, "• thread work: 16 elements (4×4 tile)", { size: 19, color: INK });
+  text(b3X + 25, topY + 145, "• memory traffic per 16 FMAs:", { size: 19, weight: 700, color: COLORS.teal });
+  text(b3X + 45, topY + 172, "4 loads from As + 4 loads from Bs = 8 reads", { size: 18, color: "#555" });
+  text(b3X + 45, topY + 196, "= 0.5 shared reads / FMA (4× traffic drop!)", { size: 18, color: COLORS.teal, weight: 700 });
+
+  text(b3X + 25, topY + 236, "• register reuse: 2D outer product", { size: 19, color: INK });
+  text(b3X + 45, topY + 262, "both A and B fragments live in registers; 16 FMAs executed locally", { size: 17, color: COLORS.muted });
+
+  text(b3X + 25, topY + 310, "verdict: 2.47× speedup, hits 600 GFLOPS!", { size: 19, weight: 700, color: "#1a6e3a" });
+
+  // =======================================================================
+  // BOTTOM SECTION: Measured Benchmark Table (Tesla T4)
+  // =======================================================================
+  const tableY = 575;
+  line(startX, tableY, 1520, tableY, { stroke: COLORS.muted, strokeWidth: 1 });
+
+  text(startX, tableY + 30, "measured on Tesla T4 (M = N = K = 1024, 2.15 GFLOPs, 7 interleaved rounds, median reported):",
+       { size: 21, color: COLORS.muted });
+
+  const cols = [startX, startX + 260, startX + 530, startX + 800, startX + 1070, startX + 1280];
+  const rowH = 40;
+
+  // table headers
+  text(cols[0], tableY + 68, "kernel", { size: 21, color: COLORS.muted });
+  text(cols[1], tableY + 68, "outputs/thread", { size: 21, color: COLORS.muted });
+  text(cols[2], tableY + 68, "median time", { size: 21, color: COLORS.muted });
+  text(cols[3], tableY + 68, "spread", { size: 21, color: COLORS.muted });
+  text(cols[4], tableY + 68, "throughput", { size: 21, color: COLORS.muted });
+  text(cols[5], tableY + 68, "speedup", { size: 21, color: COLORS.muted });
+
+  const rows = [
+    ["shared_tiled", "1×1 (1 float)",     "8.841 ms", "8.833 – 8.851 ms", "242.9 GFLOPS", "baseline"],
+    ["coarsened_1d", "1×4 (4 floats)",    "7.950 ms", "7.940 – 7.958 ms", "270.1 GFLOPS", "1.11× faster"],
+    ["reg_tiled_2d", "4×4 (16 floats)",   "3.578 ms", "3.551 – 3.893 ms", "600.2 GFLOPS", "2.47× faster!"],
+  ];
+
+  for (let r = 0; r < rows.length; r++) {
+    const y = tableY + 110 + r * rowH;
+    const isTop = r === 2;
+    const color = isTop ? COLORS.teal : (r === 0 ? COLORS.coral : "#9a6a00");
+
+    text(cols[0], y, rows[r][0], { size: 21, color: INK, weight: isTop ? 700 : 400 });
+    text(cols[1], y, rows[r][1], { size: 21, color: COLORS.muted });
+    text(cols[2], y, rows[r][2], { size: 21, color: color, weight: isTop ? 700 : 400 });
+    text(cols[3], y, rows[r][3], { size: 20, color: COLORS.muted });
+    text(cols[4], y, rows[r][4], { size: 21, color: color, weight: 700 });
+    text(cols[5], y, rows[r][5], { size: 21, color: color, weight: isTop ? 700 : 400 });
+  }
+
+  const takeawayEl = text(startX, tableY + 250, "takeaway: 2D Register Tiling cuts shared memory traffic by 4×, shifting arithmetic into registers to jump from 243 → 600 GFLOPS.",
+                          { size: 22, color: COLORS.coral, weight: 700 });
+  underline(takeawayEl, COLORS.coral);
+});
+</script>
+</body>
+</html>
